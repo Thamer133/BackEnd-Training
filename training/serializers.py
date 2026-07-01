@@ -8,6 +8,8 @@ class PersonSerializer(serializers.ModelSerializer):
 
 
 class CivilRecordSerializer(serializers.ModelSerializer):
+    gender_display = serializers.CharField(source='get_gender_display', read_only=True)
+
     class Meta:
         model = CivilRecord
-        fields = ['id', 'civil_id', 'unified_number', 'name', 'age']
+        fields = ['id', 'civil_id', 'unified_number', 'name', 'age', 'nationality', 'gender', 'gender_display']
