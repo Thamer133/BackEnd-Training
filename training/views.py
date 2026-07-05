@@ -1,3 +1,4 @@
+from datetime import date
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -128,3 +129,55 @@ def assign_unified(request):
     person.save()
 
     return Response({"success": True, "message": "تم حفظ الرقم الموحد بنجاح", "unified_number": unified_number}, status=status.HTTP_200_OK)
+
+
+# FILTER RECORDS — بالجنسية / الجنس / مدى العمر (محسوب من تاريخين)
+@api_view(['POST'])
+def filter_records(request):
+    nationality   = request.data.get('nationality', '').strip()
+    gender        = request.data.get('gender', '').strip()          # 'M' أو 'F' أو 'ذكر'/'أنثى' أو فاضي = الكل
+    birth_from    = request.data.get('birth_date_from', '').strip() # YYYY-MM-DD (أقدم تاريخ ميلاد = أكبر عمر)
+    birth_to      = request.data.get('birth_date_to', '').strip()   # YYYY-MM-DD (أحدث تاريخ ميلاد = أصغر عمر)
+
+    records = CivilRecord.objects.all()
+
+    # ── فلترة الجنسية ──
+    if nationality and nationality != 'عرض الكل':
+        records = records.filter(nationality=nationality)
+
+    # ── فلترة الجنس ──
+    if gender and gender != 'عرض الكل':
+        gender_map = {'ذكر': 'M', 'أنثى': 'F', 'M': 'M', 'F': 'F'}
+        gender_code = gender_map.get(gender)
+        if gender_code:
+            records = records.filter(gender=gender_code)
+
+    # ── فلترة العمر (محسوبة من التاريخين) ──
+    today = date.today()
+
+    def age_from_date_str(date_str):
+        try:
+            y, m, d = map(int, date_str.split('-'))
+            born = date(y, m, d)
+            age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+            return age
+        except (ValueError, AttributeError):
+            return None
+
+    min_age = None
+    max_age = None
+
+    if birth_to:
+        # تاريخ ميلاد أحدث → عمر أصغر → هذا هو الحد الأدنى للعمر
+        min_age = age_from_date_str(birth_to)
+    if birth_from:
+        # تاريخ ميلاد أقدم → عمر أكبر → هذا هو الحد الأعلى للعمر
+        max_age = age_from_date_str(birth_from)
+
+    if min_age is not None:
+        records = records.filter(age__gte=min_age)
+    if max_age is not None:
+        records = records.filter(age__lte=max_age)
+
+    serializer = CivilRecordSerializer(records, many=True)
+    return Response(serializer.data, status=status.HTTP_200_OK)
