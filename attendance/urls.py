@@ -1,8 +1,9 @@
-# ضعه بالمسار: attendance/urls.py
-
 from django.urls import path
 from . import views
 
 urlpatterns = [
     path('employees/', views.employee_list),
+    path('sick-leaves/', views.sick_leave_list),
+    path('sick-leaves/<int:pk>/', views.sick_leave_detail),
+    path('activity-logs/', views.activity_log_list),
 ]
