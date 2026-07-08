@@ -1,37 +1,34 @@
 from django.db import models
 
 
-class Employee(models.Model):
-    name = models.CharField(max_length=255)
+class Person(models.Model):
+    name        = models.CharField(max_length=255)
+    civil_id    = models.CharField(max_length=12, unique=True)
+    nationality = models.CharField(max_length=100)
+
+    class Meta:
+        db_table = 'training_person'
 
     def __str__(self):
         return self.name
 
 
-class SickLeave(models.Model):
-    employee    = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='sick_leaves')
-    date        = models.DateField()
-    recorded_at = models.DateTimeField(auto_now_add=True)  # وقت الحفظ الفعلي بالسيرفر
+class CivilRecord(models.Model):
 
-    class Meta:
-        unique_together = ('employee', 'date')  # يمنع نفس التاريخ مرتين لنفس الموظف
-        ordering = ['date']
-
-    def __str__(self):
-        return f"{self.employee.name} - {self.date}"
-
-
-class ActivityLog(models.Model):
-    ACTION_CHOICES = [
-        ('create', 'إضافة'),
-        ('delete', 'حذف'),
+    GENDER_CHOICES = [
+        ('M', 'ذكر'),
+        ('F', 'أنثى'),
     ]
-    action      = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    description = models.CharField(max_length=255)
-    created_at  = models.DateTimeField(auto_now_add=True)
+
+    civil_id       = models.CharField(max_length=12, unique=True, null=True, blank=True)
+    unified_number = models.CharField(max_length=9,  unique=True, null=True, blank=True)
+    name           = models.CharField(max_length=255)
+    age            = models.PositiveIntegerField()
+    nationality    = models.CharField(max_length=100, null=True, blank=True)
+    gender         = models.CharField(max_length=1, choices=GENDER_CHOICES, null=True, blank=True)
 
     class Meta:
-        ordering = ['-created_at']
+        db_table = 'training_civilrecord'
 
     def __str__(self):
-        return f"{self.get_action_display()} — {self.description} ({self.created_at})"
+        return self.name

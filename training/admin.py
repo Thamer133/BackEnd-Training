@@ -1,22 +1,14 @@
 from django.contrib import admin
-from .models import Employee, SickLeave, ActivityLog
+from .models import CivilRecord, Person
 
 
-@admin.register(Employee)
-class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['name']
-    search_fields = ['name']
+@admin.register(CivilRecord)
+class CivilRecordAdmin(admin.ModelAdmin):
+    list_display = ['name', 'civil_id', 'unified_number', 'nationality', 'gender', 'age']
+    search_fields = ['name', 'civil_id', 'unified_number']
+    list_filter = ['gender', 'nationality']
 
 
-@admin.register(SickLeave)
-class SickLeaveAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'date', 'recorded_at']
-    list_filter = ['employee']
-    search_fields = ['employee__name']
-
-
-@admin.register(ActivityLog)
-class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['action', 'description', 'created_at']
-    list_filter = ['action']
-    search_fields = ['description']
+@admin.register(Person)
+class PersonAdmin(admin.ModelAdmin):
+    list_display = ['name', 'civil_id', 'nationality']
