@@ -1,19 +1,21 @@
+﻿from datetime import date
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse
 from .serializers import (
     EmployeeSerializer,
     SickLeaveSerializer,
     ActivityLogSerializer,
     AttendanceRecordSerializer,
+    ExcuseSerializer,
 )
 
 SICK_LEAVE_LIMIT = 15
-ATTENDANCE_WINDOW = 30  # آخر 30 عملية بس تنعرض
+ATTENDANCE_WINDOW = 30
+MONTHLY_EXCUSE_LIMIT = 4
 
 
-# GET ALL EMPLOYEES
 @api_view(['GET'])
 def employee_list(request):
     employees = Employee.objects.all().order_by('name')
@@ -21,7 +23,6 @@ def employee_list(request):
     return Response(serializer.data)
 
 
-# GET (كل الطبيات لكل الموظفين) - POST (إضافة طبية جديدة)
 @api_view(['GET', 'POST'])
 def sick_leave_list(request):
     if request.method == 'GET':
@@ -63,7 +64,6 @@ def sick_leave_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# DELETE طبية معينة
 @api_view(['DELETE'])
 def sick_leave_detail(request, pk):
     try:
@@ -77,7 +77,6 @@ def sick_leave_detail(request, pk):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# GET سجل آخر العمليات (آخر 200 عملية) — POST تسجيل عملية جديدة من الفرونت إند
 @api_view(['GET', 'POST'])
 def activity_log_list(request):
     if request.method == 'GET':
@@ -97,7 +96,6 @@ def activity_log_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# GET (آخر 30 عملية حضور/انصراف لموظف معين) — POST (تسجيل حضور أو انصراف جديد)
 @api_view(['GET', 'POST'])
 def attendance_record_list(request):
     if request.method == 'GET':
@@ -127,4 +125,59 @@ def attendance_record_list(request):
             description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}",
         )
         serializer = AttendanceRecordSerializer(record)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['GET', 'POST'])
+def excuse_list(request):
+    if request.method == 'GET':
+        employee_name = request.query_params.get('employee_name', '').strip()
+        excuses = Excuse.objects.select_related('employee').all()
+        if employee_name:
+            excuses = excuses.filter(employee__name=employee_name)
+        serializer = ExcuseSerializer(excuses, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        employee_id = request.data.get('employee')
+        date_str    = request.data.get('date')
+        time_from   = request.data.get('time_from')
+        time_to     = request.data.get('time_to')
+        period      = request.data.get('period')
+
+        if not all([employee_id, date_str, time_from, time_to, period]):
+            return Response({"error": "الرجاء تعبئة كل الحقول"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            employee = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+        today = date.today()
+
+        if Excuse.objects.filter(employee=employee, recorded_at__date=today).exists():
+            return Response(
+                {"error": "تم تسجيل استئذان اليوم، ولا يمكن تسجيل استئذان آخر إلا بعد مرور يوم كامل"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        month_count = Excuse.objects.filter(
+            employee=employee,
+            recorded_at__year=today.year,
+            recorded_at__month=today.month,
+        ).count()
+        if month_count >= MONTHLY_EXCUSE_LIMIT:
+            return Response(
+                {"error": f"تم استخدام كل الاستئذانات المسموحة هذا الشهر ({MONTHLY_EXCUSE_LIMIT})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        excuse = Excuse.objects.create(
+            employee=employee, date=date_str, time_from=time_from, time_to=time_to, period=period,
+        )
+        ActivityLog.objects.create(
+            action='create',
+            description=f"{employee.name} سجّل استئذان بتاريخ {date_str} من {time_from} إلى {time_to} ({period})",
+        )
+        serializer = ExcuseSerializer(excuse)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
