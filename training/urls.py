@@ -2,8 +2,10 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('employees/', views.employee_list),
-    path('sick-leaves/', views.sick_leave_list),
-    path('sick-leaves/<int:pk>/', views.sick_leave_detail),
-    path('activity-logs/', views.activity_log_list),
+    path('persons/', views.person_list),
+    path('persons/<int:pk>/', views.person_detail),
+    path('civil-records/', views.civil_record_list),
+    path('check-id/', views.check_id),
+    path('assign-unified/', views.assign_unified),
+    path('filter-records/', views.filter_records),
 ]
