@@ -29,6 +29,7 @@ class ActivityLog(models.Model):
     ]
     action      = models.CharField(max_length=10, choices=ACTION_CHOICES)
     description = models.CharField(max_length=255)
+    ip_address  = models.GenericIPAddressField(null=True, blank=True)  # عنوان IP للجهاز اللي سوّى العملية
     created_at  = models.DateTimeField(auto_now_add=True)
 
     class Meta:

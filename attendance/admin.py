@@ -17,9 +17,9 @@ class SickLeaveAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['action', 'description', 'created_at']
+    list_display = ['action', 'description', 'ip_address', 'created_at']
     list_filter = ['action']
-    search_fields = ['description']
+    search_fields = ['description', 'ip_address']
 
 
 @admin.register(AttendanceRecord)

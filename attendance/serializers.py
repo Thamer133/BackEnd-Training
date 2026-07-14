@@ -21,7 +21,7 @@ class ActivityLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ActivityLog
-        fields = ['id', 'action', 'action_display', 'description', 'created_at']
+        fields = ['id', 'action', 'action_display', 'description', 'ip_address', 'created_at']
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):

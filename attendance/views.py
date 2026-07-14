@@ -19,6 +19,18 @@ PERIODIC_VACATION_YEARLY_LIMIT  = 35
 EMERGENCY_VACATION_YEARLY_LIMIT = 4
 
 
+def get_client_ip(request):
+    """
+    يرجّع عنوان IP الحقيقي للجهاز اللي سوّى الطلب.
+    لو الطلب مار عبر بروكسي/لود بالانسر (X-Forwarded-For)، ناخذ أول IP بالسلسلة
+    (وهو IP العميل الأصلي). وإلا نرجع REMOTE_ADDR مباشرة (الاتصال المحلي المباشر).
+    """
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
+
+
 # GET ALL EMPLOYEES
 @api_view(['GET'])
 def employee_list(request):
@@ -64,6 +76,7 @@ def sick_leave_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"تسجيل طبية لـ {employee.name} بتاريخ {date_str}",
+            ip_address=get_client_ip(request),
         )
         serializer = SickLeaveSerializer(leave)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -79,7 +92,7 @@ def sick_leave_detail(request, pk):
 
     description = f"حذف طبية لـ {leave.employee.name} بتاريخ {leave.date}"
     leave.delete()
-    ActivityLog.objects.create(action='delete', description=description)
+    ActivityLog.objects.create(action='delete', description=description, ip_address=get_client_ip(request))
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -98,7 +111,7 @@ def activity_log_list(request):
         if not description:
             return Response({"error": "الوصف مطلوب"}, status=status.HTTP_400_BAD_REQUEST)
 
-        log = ActivityLog.objects.create(action=action, description=description)
+        log = ActivityLog.objects.create(action=action, description=description, ip_address=get_client_ip(request))
         serializer = ActivityLogSerializer(log)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -131,6 +144,7 @@ def attendance_record_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}",
+            ip_address=get_client_ip(request),
         )
         serializer = AttendanceRecordSerializer(record)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -189,6 +203,7 @@ def excuse_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل استئذان بتاريخ {date_str} من {time_from} إلى {time_to} ({period})",
+            ip_address=get_client_ip(request),
         )
         serializer = ExcuseSerializer(excuse)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -228,6 +243,27 @@ def vacation_list(request):
             if date_to < date_from:
                 return Response({"error": "تاريخ النهاية يجب أن يكون بعد تاريخ البداية"}, status=status.HTTP_400_BAD_REQUEST)
 
+        # ── تحقق من التعارض: هذا التاريخ (أو المدى) يتقاطع مع أي إجازة أخرى مسجلة مسبقاً ──
+        # (دورية أو طارئة، غير المرفوضة) — يطبّق على النوعين معاً بما إن الموظف ما يقدر
+        # يكون بإجازتين بنفس اليوم مهما كان نوعهم
+        new_from = date.fromisoformat(date_from)
+        new_to = date.fromisoformat(date_to) if vacation_type == 'periodic' else new_from
+
+        overlapping = Vacation.objects.filter(employee=employee).exclude(status='rejected')
+        for v in overlapping:
+            existing_from = v.date_from
+            existing_to = v.date_to if v.date_to else v.date_from
+            # تقاطع مدَيين: يتقاطعون إذا بداية أحدهم قبل أو تساوي نهاية الثاني، والعكس
+            if new_from <= existing_to and new_to >= existing_from:
+                conflict_range = (
+                    f"{existing_from}" if existing_from == existing_to else f"{existing_from} إلى {existing_to}"
+                )
+                return Response(
+                    {"error": f"يوجد تعارض مع إجازة {v.get_vacation_type_display()} مسجلة مسبقاً بتاريخ {conflict_range}"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        if vacation_type == 'periodic':
             # حساب عدد الأيام المستخدمة هذي السنة من الإجازات الدورية (غير المرفوضة)
             existing = Vacation.objects.filter(
                 employee=employee, vacation_type='periodic', date_from__year=year,
@@ -260,6 +296,7 @@ def vacation_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل إجازة {vacation.get_vacation_type_display()} بتاريخ {date_from}",
+            ip_address=get_client_ip(request),
         )
         serializer = VacationSerializer(vacation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
