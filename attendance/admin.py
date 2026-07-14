@@ -1,11 +1,11 @@
 from django.contrib import admin
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['name']
-    search_fields = ['name']
+    list_display = ['name', 'civil_id']
+    search_fields = ['name', 'civil_id']
 
 
 @admin.register(SickLeave)
@@ -33,4 +33,11 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
 class ExcuseAdmin(admin.ModelAdmin):
     list_display = ['employee', 'date', 'time_from', 'time_to', 'period', 'recorded_at']
     list_filter = ['employee', 'period']
+    search_fields = ['employee__name']
+
+
+@admin.register(Vacation)
+class VacationAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'vacation_type', 'date_from', 'date_to', 'status', 'recorded_at']
+    list_filter = ['employee', 'vacation_type', 'status']
     search_fields = ['employee__name']

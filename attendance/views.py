@@ -1,21 +1,25 @@
-﻿from datetime import date
+from datetime import date
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation
 from .serializers import (
     EmployeeSerializer,
     SickLeaveSerializer,
     ActivityLogSerializer,
     AttendanceRecordSerializer,
     ExcuseSerializer,
+    VacationSerializer,
 )
 
 SICK_LEAVE_LIMIT = 15
-ATTENDANCE_WINDOW = 30
+ATTENDANCE_WINDOW = 30  # آخر 30 عملية بس تنعرض
 MONTHLY_EXCUSE_LIMIT = 4
+PERIODIC_VACATION_YEARLY_LIMIT  = 35
+EMERGENCY_VACATION_YEARLY_LIMIT = 4
 
 
+# GET ALL EMPLOYEES
 @api_view(['GET'])
 def employee_list(request):
     employees = Employee.objects.all().order_by('name')
@@ -23,6 +27,7 @@ def employee_list(request):
     return Response(serializer.data)
 
 
+# GET (كل الطبيات لكل الموظفين) - POST (إضافة طبية جديدة)
 @api_view(['GET', 'POST'])
 def sick_leave_list(request):
     if request.method == 'GET':
@@ -64,6 +69,7 @@ def sick_leave_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+# DELETE طبية معينة
 @api_view(['DELETE'])
 def sick_leave_detail(request, pk):
     try:
@@ -77,6 +83,7 @@ def sick_leave_detail(request, pk):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# GET سجل آخر العمليات (آخر 200 عملية) — POST تسجيل عملية جديدة من الفرونت إند
 @api_view(['GET', 'POST'])
 def activity_log_list(request):
     if request.method == 'GET':
@@ -96,6 +103,7 @@ def activity_log_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+# GET (آخر 30 عملية حضور/انصراف لموظف معين) — POST (تسجيل حضور أو انصراف جديد)
 @api_view(['GET', 'POST'])
 def attendance_record_list(request):
     if request.method == 'GET':
@@ -128,6 +136,7 @@ def attendance_record_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+# GET (كل استئذانات موظف معين) — POST (تسجيل استئذان جديد)
 @api_view(['GET', 'POST'])
 def excuse_list(request):
     if request.method == 'GET':
@@ -155,12 +164,14 @@ def excuse_list(request):
 
         today = date.today()
 
+        # ── قفل يومي: استئذان واحد بس باليوم (بناءً على وقت التسجيل الفعلي) ──
         if Excuse.objects.filter(employee=employee, recorded_at__date=today).exists():
             return Response(
                 {"error": "تم تسجيل استئذان اليوم، ولا يمكن تسجيل استئذان آخر إلا بعد مرور يوم كامل"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ── الحد الشهري ──
         month_count = Excuse.objects.filter(
             employee=employee,
             recorded_at__year=today.year,
@@ -180,4 +191,75 @@ def excuse_list(request):
             description=f"{employee.name} سجّل استئذان بتاريخ {date_str} من {time_from} إلى {time_to} ({period})",
         )
         serializer = ExcuseSerializer(excuse)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# GET (كل إجازات موظف معين) — POST (تسجيل إجازة جديدة: دورية أو طارئة)
+@api_view(['GET', 'POST'])
+def vacation_list(request):
+    if request.method == 'GET':
+        employee_name = request.query_params.get('employee_name', '').strip()
+        vacations = Vacation.objects.select_related('employee').all()
+        if employee_name:
+            vacations = vacations.filter(employee__name=employee_name)
+        serializer = VacationSerializer(vacations, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        employee_id   = request.data.get('employee')
+        vacation_type = request.data.get('vacation_type')
+        date_from     = request.data.get('date_from')
+        date_to       = request.data.get('date_to')
+
+        if not employee_id or vacation_type not in ('periodic', 'emergency') or not date_from:
+            return Response({"error": "بيانات غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if vacation_type == 'periodic' and not date_to:
+            return Response({"error": "الرجاء تحديد تاريخ النهاية للإجازة الدورية"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            employee = Employee.objects.get(id=employee_id)
+        except Employee.DoesNotExist:
+            return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+        year = date.today().year
+
+        if vacation_type == 'periodic':
+            if date_to < date_from:
+                return Response({"error": "تاريخ النهاية يجب أن يكون بعد تاريخ البداية"}, status=status.HTTP_400_BAD_REQUEST)
+
+            # حساب عدد الأيام المستخدمة هذي السنة من الإجازات الدورية (غير المرفوضة)
+            existing = Vacation.objects.filter(
+                employee=employee, vacation_type='periodic', date_from__year=year,
+            ).exclude(status='rejected')
+            used_days = sum((v.date_to - v.date_from).days + 1 for v in existing)
+            new_days = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days + 1
+
+            if used_days + new_days > PERIODIC_VACATION_YEARLY_LIMIT:
+                remaining = max(0, PERIODIC_VACATION_YEARLY_LIMIT - used_days)
+                return Response(
+                    {"error": f"تجاوزت الحد المسموح للإجازة الدورية هذه السنة (المتبقي: {remaining} يوم من {PERIODIC_VACATION_YEARLY_LIMIT})"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        else:
+            date_to = None
+            used_count = Vacation.objects.filter(
+                employee=employee, vacation_type='emergency', date_from__year=year,
+            ).exclude(status='rejected').count()
+
+            if used_count >= EMERGENCY_VACATION_YEARLY_LIMIT:
+                return Response(
+                    {"error": f"تم استخدام كل الإجازات الطارئة المسموحة هذه السنة ({EMERGENCY_VACATION_YEARLY_LIMIT})"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        vacation = Vacation.objects.create(
+            employee=employee, vacation_type=vacation_type,
+            date_from=date_from, date_to=date_to, status='pending',
+        )
+        ActivityLog.objects.create(
+            action='create',
+            description=f"{employee.name} سجّل إجازة {vacation.get_vacation_type_display()} بتاريخ {date_from}",
+        )
+        serializer = VacationSerializer(vacation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
