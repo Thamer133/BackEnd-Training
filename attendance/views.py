@@ -2,7 +2,7 @@ from datetime import date
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
 from .serializers import (
     EmployeeSerializer,
     SickLeaveSerializer,
@@ -10,6 +10,7 @@ from .serializers import (
     AttendanceRecordSerializer,
     ExcuseSerializer,
     VacationSerializer,
+    SupervisorSerializer,
 )
 
 SICK_LEAVE_LIMIT = 15
@@ -34,8 +35,22 @@ def get_client_ip(request):
 # GET ALL EMPLOYEES
 @api_view(['GET'])
 def employee_list(request):
+    civil_id = request.query_params.get('civil_id', '').strip()
     employees = Employee.objects.all().order_by('name')
+    if civil_id:
+        employees = employees.filter(civil_id__icontains=civil_id)
     serializer = EmployeeSerializer(employees, many=True)
+    return Response(serializer.data)
+
+
+# GET ALL SUPERVISORS (المسؤولين — تُعبّى يدوياً من لوحة الأدمن)
+@api_view(['GET'])
+def supervisor_list(request):
+    civil_id = request.query_params.get('civil_id', '').strip()
+    supervisors = Supervisor.objects.all().order_by('name')
+    if civil_id:
+        supervisors = supervisors.filter(civil_id__icontains=civil_id)
+    serializer = SupervisorSerializer(supervisors, many=True)
     return Response(serializer.data)
 
 
@@ -76,6 +91,7 @@ def sick_leave_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"تسجيل طبية لـ {employee.name} بتاريخ {date_str}",
+            source='sick_leave',
             ip_address=get_client_ip(request),
         )
         serializer = SickLeaveSerializer(leave)
@@ -92,7 +108,7 @@ def sick_leave_detail(request, pk):
 
     description = f"حذف طبية لـ {leave.employee.name} بتاريخ {leave.date}"
     leave.delete()
-    ActivityLog.objects.create(action='delete', description=description, ip_address=get_client_ip(request))
+    ActivityLog.objects.create(action='delete', description=description, source='sick_leave', ip_address=get_client_ip(request))
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -107,11 +123,12 @@ def activity_log_list(request):
     elif request.method == 'POST':
         description = request.data.get('description', '').strip()
         action = request.data.get('action', 'create')
+        source = request.data.get('source', 'other')
 
         if not description:
             return Response({"error": "الوصف مطلوب"}, status=status.HTTP_400_BAD_REQUEST)
 
-        log = ActivityLog.objects.create(action=action, description=description, ip_address=get_client_ip(request))
+        log = ActivityLog.objects.create(action=action, description=description, source=source, ip_address=get_client_ip(request))
         serializer = ActivityLogSerializer(log)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -144,6 +161,7 @@ def attendance_record_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}",
+            source='attendance',
             ip_address=get_client_ip(request),
         )
         serializer = AttendanceRecordSerializer(record)
@@ -203,6 +221,7 @@ def excuse_list(request):
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل استئذان بتاريخ {date_str} من {time_from} إلى {time_to} ({period})",
+            source='excuse',
             ip_address=get_client_ip(request),
         )
         serializer = ExcuseSerializer(excuse)
@@ -289,14 +308,92 @@ def vacation_list(request):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
+        # الإجازة الطارئة تُقبل تلقائياً فور التسجيل (بدون مراجعة أدمن) —
+        # الدورية بس هي اللي تدخل قائمة "طلبات الإجازات" بانتظار قرار المسؤول
+        initial_status = 'accepted' if vacation_type == 'emergency' else 'pending'
+
         vacation = Vacation.objects.create(
             employee=employee, vacation_type=vacation_type,
-            date_from=date_from, date_to=date_to, status='pending',
+            date_from=date_from, date_to=date_to, status=initial_status,
         )
+        auto_note = " (تم القبول تلقائياً)" if vacation_type == 'emergency' else ""
         ActivityLog.objects.create(
             action='create',
-            description=f"{employee.name} سجّل إجازة {vacation.get_vacation_type_display()} بتاريخ {date_from}",
+            description=f"{employee.name} سجّل إجازة {vacation.get_vacation_type_display()} بتاريخ {date_from}{auto_note}",
+            source='vacation',
             ip_address=get_client_ip(request),
         )
         serializer = VacationSerializer(vacation)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# PATCH — تحديث حالة إجازة معينة (قبول/رفض/إرجاع لقيد الانتظار) — يستخدمه الأدمن بس
+@api_view(['PATCH'])
+def vacation_detail(request, pk):
+    try:
+        vacation = Vacation.objects.get(pk=pk)
+    except Vacation.DoesNotExist:
+        return Response({"error": "الإجازة غير موجودة"}, status=status.HTTP_404_NOT_FOUND)
+
+    new_status = request.data.get('status')
+    valid_statuses = [choice[0] for choice in Vacation.STATUS_CHOICES]
+    if new_status not in valid_statuses:
+        return Response({"error": "حالة غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
+
+    reviewed_by_id = request.data.get('reviewed_by')
+    supervisor = None
+    # نطلب تحديد المسؤول إلزامياً بس لما القرار يكون قبول أو رفض فعلي (مو رجوع لقيد الانتظار)
+    if new_status in ('accepted', 'rejected'):
+        if not reviewed_by_id:
+            return Response({"error": "الرجاء اختيار اسم المسؤول قبل اتخاذ القرار"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            supervisor = Supervisor.objects.get(id=reviewed_by_id)
+        except Supervisor.DoesNotExist:
+            return Response({"error": "المسؤول المحدد غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+    vacation.status = new_status
+    if supervisor:
+        vacation.reviewed_by = supervisor
+    vacation.save()
+
+    reviewer_note = f" بواسطة {supervisor.name}" if supervisor else ""
+    ActivityLog.objects.create(
+        action='create',
+        description=f"تم تحديث حالة إجازة {vacation.employee.name} ({vacation.get_vacation_type_display()}) إلى {vacation.get_status_display()}{reviewer_note}",
+        source='vacation',
+        ip_address=get_client_ip(request),
+    )
+
+    serializer = VacationSerializer(vacation)
+    return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+# GET — الملف الشامل لموظف عن طريق الرقم المدني: بياناته + كل سجلاته
+# (حضور/انصراف، طبيات، استئذانات، إجازات) دفعة وحدة
+# مثال: /api/attendance/employee-profile/?civil_id=303011201404
+@api_view(['GET'])
+def employee_full_profile(request):
+    civil_id = request.query_params.get('civil_id', '').strip()
+
+    if not civil_id:
+        return Response({"error": "الرجاء إرسال الرقم المدني عبر civil_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        employee = Employee.objects.get(civil_id=civil_id)
+    except Employee.DoesNotExist:
+        return Response({"error": "لا يوجد موظف بهذا الرقم المدني"}, status=status.HTTP_404_NOT_FOUND)
+    except Employee.MultipleObjectsReturned:
+        return Response({"error": "يوجد أكثر من موظف بنفس الرقم المدني، راجع البيانات بالأدمن"}, status=status.HTTP_400_BAD_REQUEST)
+
+    attendance_records = AttendanceRecord.objects.filter(employee=employee)
+    sick_leaves        = SickLeave.objects.filter(employee=employee)
+    excuses            = Excuse.objects.filter(employee=employee)
+    vacations          = Vacation.objects.filter(employee=employee)
+
+    return Response({
+        "employee": EmployeeSerializer(employee).data,
+        "attendance_records": AttendanceRecordSerializer(attendance_records, many=True).data,
+        "sick_leaves": SickLeaveSerializer(sick_leaves, many=True).data,
+        "excuses": ExcuseSerializer(excuses, many=True).data,
+        "vacations": VacationSerializer(vacations, many=True).data,
+    }, status=status.HTTP_200_OK)

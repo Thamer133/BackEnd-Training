@@ -27,8 +27,17 @@ class ActivityLog(models.Model):
         ('create', 'إضافة'),
         ('delete', 'حذف'),
     ]
+    # القسم/الجدول اللي صار فيه التعديل — يظهر بعمود منفصل بالأدمن جنب IP
+    SOURCE_CHOICES = [
+        ('attendance', 'حضور و انصراف'),
+        ('excuse',     'الاستئذانات'),
+        ('sick_leave', 'الطبيات'),
+        ('vacation',   'الإجازات'),
+        ('other',      'أخرى'),
+    ]
     action      = models.CharField(max_length=10, choices=ACTION_CHOICES)
     description = models.CharField(max_length=255)
+    source      = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='other')
     ip_address  = models.GenericIPAddressField(null=True, blank=True)  # عنوان IP للجهاز اللي سوّى العملية
     created_at  = models.DateTimeField(auto_now_add=True)
 
@@ -70,6 +79,18 @@ class Excuse(models.Model):
         return f"{self.employee.name} - {self.date} ({self.period})"
 
 
+class Supervisor(models.Model):
+    """
+    جدول المسؤولين (اللي يوافقون/يرفضون طلبات الإجازات) — نفس هيكل Employee
+    بالضبط (اسم + رقم مدني)، بس منفصل تماماً. يُعبّى يدوياً من لوحة الأدمن.
+    """
+    name     = models.CharField(max_length=255)
+    civil_id = models.CharField(max_length=12, null=True, blank=True)
+
+    def __str__(self):
+        return self.name
+
+
 class Vacation(models.Model):
     TYPE_CHOICES = [
         ('periodic', 'دورية'),
@@ -86,6 +107,8 @@ class Vacation(models.Model):
     date_from     = models.DateField()                        # دورية: تاريخ البداية / طارئة: نفس تاريخ اليوم
     date_to       = models.DateField(null=True, blank=True)   # دورية بس — الطارئة يوم واحد فبدون تاريخ نهاية
     status        = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    # المسؤول اللي وافق/رفض الطلب — يتحدد لحظة اتخاذ القرار (فاضي لحد يصير قرار)
+    reviewed_by   = models.ForeignKey(Supervisor, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_vacations')
     recorded_at   = models.DateTimeField(auto_now_add=True)   # وقت الحفظ الفعلي بالسيرفر
 
     class Meta:

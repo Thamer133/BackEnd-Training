@@ -1,9 +1,15 @@
 from django.contrib import admin
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
+    list_display = ['name', 'civil_id']
+    search_fields = ['name', 'civil_id']
+
+
+@admin.register(Supervisor)
+class SupervisorAdmin(admin.ModelAdmin):
     list_display = ['name', 'civil_id']
     search_fields = ['name', 'civil_id']
 
@@ -17,9 +23,13 @@ class SickLeaveAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['action', 'description', 'ip_address', 'created_at']
-    list_filter = ['action']
+    list_display = ['action', 'description', 'table', 'ip_address', 'created_at']
+    list_filter = ['action', 'source']
     search_fields = ['description', 'ip_address']
+
+    def table(self, obj):
+        return obj.get_source_display()
+    table.short_description = "table"
 
 
 @admin.register(AttendanceRecord)
@@ -38,6 +48,6 @@ class ExcuseAdmin(admin.ModelAdmin):
 
 @admin.register(Vacation)
 class VacationAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'vacation_type', 'date_from', 'date_to', 'status', 'recorded_at']
+    list_display = ['employee', 'vacation_type', 'date_from', 'date_to', 'status', 'reviewed_by', 'recorded_at']
     list_filter = ['employee', 'vacation_type', 'status']
     search_fields = ['employee__name']
