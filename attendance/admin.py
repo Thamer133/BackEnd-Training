@@ -4,14 +4,14 @@ from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'civil_id']
-    search_fields = ['name', 'civil_id']
+    list_display = ['name', 'civil_id', 'phone_number']
+    search_fields = ['name', 'civil_id', 'phone_number']
 
 
 @admin.register(Supervisor)
 class SupervisorAdmin(admin.ModelAdmin):
-    list_display = ['name', 'civil_id']
-    search_fields = ['name', 'civil_id']
+    list_display = ['name', 'civil_id', 'phone_number']
+    search_fields = ['name', 'civil_id', 'phone_number']
 
 
 @admin.register(SickLeave)

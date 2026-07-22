@@ -5,13 +5,13 @@ from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'civil_id']
+        fields = ['id', 'name', 'civil_id', 'phone_number']
 
 
 class SupervisorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supervisor
-        fields = ['id', 'name', 'civil_id']
+        fields = ['id', 'name', 'civil_id', 'phone_number']
 
 
 class SickLeaveSerializer(serializers.ModelSerializer):

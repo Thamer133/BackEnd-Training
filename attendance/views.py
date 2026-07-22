@@ -35,10 +35,18 @@ def get_client_ip(request):
 # GET ALL EMPLOYEES
 @api_view(['GET'])
 def employee_list(request):
-    civil_id = request.query_params.get('civil_id', '').strip()
+    civil_id     = request.query_params.get('civil_id', '').strip()
+    name         = request.query_params.get('name', '').strip()
+    phone_number = request.query_params.get('phone_number', '').strip()
+
     employees = Employee.objects.all().order_by('name')
     if civil_id:
         employees = employees.filter(civil_id__icontains=civil_id)
+    if name:
+        employees = employees.filter(name__icontains=name)
+    if phone_number:
+        employees = employees.filter(phone_number__icontains=phone_number)
+
     serializer = EmployeeSerializer(employees, many=True)
     return Response(serializer.data)
 
@@ -46,12 +54,68 @@ def employee_list(request):
 # GET ALL SUPERVISORS (المسؤولين — تُعبّى يدوياً من لوحة الأدمن)
 @api_view(['GET'])
 def supervisor_list(request):
-    civil_id = request.query_params.get('civil_id', '').strip()
+    civil_id     = request.query_params.get('civil_id', '').strip()
+    name         = request.query_params.get('name', '').strip()
+    phone_number = request.query_params.get('phone_number', '').strip()
+
     supervisors = Supervisor.objects.all().order_by('name')
     if civil_id:
         supervisors = supervisors.filter(civil_id__icontains=civil_id)
+    if name:
+        supervisors = supervisors.filter(name__icontains=name)
+    if phone_number:
+        supervisors = supervisors.filter(phone_number__icontains=phone_number)
+
     serializer = SupervisorSerializer(supervisors, many=True)
     return Response(serializer.data)
+
+
+# GET (سجل واحد) — PATCH (تعديل جزئي: اسم/رقم مدني/تلفون) — DELETE (حذف موظف)
+@api_view(['GET', 'PATCH', 'DELETE'])
+def employee_detail(request, pk):
+    try:
+        employee = Employee.objects.get(pk=pk)
+    except Employee.DoesNotExist:
+        return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = EmployeeSerializer(employee)
+        return Response(serializer.data)
+
+    elif request.method == 'PATCH':
+        serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        employee.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+# GET (سجل واحد) — PATCH (تعديل جزئي: اسم/رقم مدني/تلفون) — DELETE (حذف مسؤول)
+@api_view(['GET', 'PATCH', 'DELETE'])
+def supervisor_detail(request, pk):
+    try:
+        supervisor = Supervisor.objects.get(pk=pk)
+    except Supervisor.DoesNotExist:
+        return Response({"error": "المسؤول غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        serializer = SupervisorSerializer(supervisor)
+        return Response(serializer.data)
+
+    elif request.method == 'PATCH':
+        serializer = SupervisorSerializer(supervisor, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    elif request.method == 'DELETE':
+        supervisor.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 # GET (كل الطبيات لكل الموظفين) - POST (إضافة طبية جديدة)
@@ -373,27 +437,42 @@ def vacation_detail(request, pk):
 # مثال: /api/attendance/employee-profile/?civil_id=303011201404
 @api_view(['GET'])
 def employee_full_profile(request):
-    civil_id = request.query_params.get('civil_id', '').strip()
+    civil_id     = request.query_params.get('civil_id', '').strip()
+    name         = request.query_params.get('name', '').strip()
+    phone_number = request.query_params.get('phone_number', '').strip()
 
-    if not civil_id:
-        return Response({"error": "الرجاء إرسال الرقم المدني عبر civil_id"}, status=status.HTTP_400_BAD_REQUEST)
+    if not civil_id and not name and not phone_number:
+        return Response(
+            {"error": "الرجاء إرسال معيار بحث واحد على الأقل: civil_id أو name أو phone_number"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
-    try:
-        employee = Employee.objects.get(civil_id=civil_id)
-    except Employee.DoesNotExist:
-        return Response({"error": "لا يوجد موظف بهذا الرقم المدني"}, status=status.HTTP_404_NOT_FOUND)
-    except Employee.MultipleObjectsReturned:
-        return Response({"error": "يوجد أكثر من موظف بنفس الرقم المدني، راجع البيانات بالأدمن"}, status=status.HTTP_400_BAD_REQUEST)
+    employees = Employee.objects.all()
+    if civil_id:
+        employees = employees.filter(civil_id__icontains=civil_id)
+    if name:
+        employees = employees.filter(name__icontains=name)
+    if phone_number:
+        employees = employees.filter(phone_number__icontains=phone_number)
 
-    attendance_records = AttendanceRecord.objects.filter(employee=employee)
-    sick_leaves        = SickLeave.objects.filter(employee=employee)
-    excuses            = Excuse.objects.filter(employee=employee)
-    vacations          = Vacation.objects.filter(employee=employee)
+    if not employees.exists():
+        return Response({"error": "لا يوجد موظف مطابق لبيانات البحث"}, status=status.HTTP_404_NOT_FOUND)
 
-    return Response({
-        "employee": EmployeeSerializer(employee).data,
-        "attendance_records": AttendanceRecordSerializer(attendance_records, many=True).data,
-        "sick_leaves": SickLeaveSerializer(sick_leaves, many=True).data,
-        "excuses": ExcuseSerializer(excuses, many=True).data,
-        "vacations": VacationSerializer(vacations, many=True).data,
-    }, status=status.HTTP_200_OK)
+    # نرجّع قائمة (Array) دايماً — حتى لو نتيجة واحدة بس — عشان شكل الرد يضل
+    # ثابت بغض النظر عن عدد المطابقات (تسهيلاً على أي كود يقرأ الرد لاحقاً)
+    results = []
+    for employee in employees:
+        attendance_records = AttendanceRecord.objects.filter(employee=employee)
+        sick_leaves        = SickLeave.objects.filter(employee=employee)
+        excuses            = Excuse.objects.filter(employee=employee)
+        vacations          = Vacation.objects.filter(employee=employee)
+
+        results.append({
+            "employee": EmployeeSerializer(employee).data,
+            "attendance_records": AttendanceRecordSerializer(attendance_records, many=True).data,
+            "sick_leaves": SickLeaveSerializer(sick_leaves, many=True).data,
+            "excuses": ExcuseSerializer(excuses, many=True).data,
+            "vacations": VacationSerializer(vacations, many=True).data,
+        })
+
+    return Response(results, status=status.HTTP_200_OK)

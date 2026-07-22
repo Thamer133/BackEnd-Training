@@ -1,9 +1,23 @@
 from django.db import models
+from django.core.validators import RegexValidator
+
+# تحقق: رقم التلفون لازم يكون 8 أرقام بالضبط (بدون مسافات أو رموز)
+phone_number_validator = RegexValidator(
+    regex=r'^\d{8}$',
+    message='رقم التلفون يجب أن يتكون من 8 أرقام بالضبط',
+)
+
+# تحقق: الرقم المدني لازم يكون 12 رقم بالضبط (بدون مسافات أو رموز)
+civil_id_validator = RegexValidator(
+    regex=r'^\d{12}$',
+    message='الرقم المدني يجب أن يتكون من 12 رقم بالضبط',
+)
 
 
 class Employee(models.Model):
-    name     = models.CharField(max_length=255)
-    civil_id = models.CharField(max_length=12, null=True, blank=True)  # الرقم المدني للموظف
+    name         = models.CharField(max_length=255)
+    civil_id     = models.CharField(max_length=12, validators=[civil_id_validator], null=True, blank=True)  # الرقم المدني للموظف
+    phone_number = models.CharField(max_length=8, validators=[phone_number_validator], null=True, blank=True)  # رقم تلفون الموظف (8 أرقام)
 
     def __str__(self):
         return self.name
@@ -82,10 +96,11 @@ class Excuse(models.Model):
 class Supervisor(models.Model):
     """
     جدول المسؤولين (اللي يوافقون/يرفضون طلبات الإجازات) — نفس هيكل Employee
-    بالضبط (اسم + رقم مدني)، بس منفصل تماماً. يُعبّى يدوياً من لوحة الأدمن.
+    تقريباً (اسم + رقم مدني + رقم تلفون)، بس منفصل تماماً. يُعبّى يدوياً من لوحة الأدمن.
     """
-    name     = models.CharField(max_length=255)
-    civil_id = models.CharField(max_length=12, null=True, blank=True)
+    name         = models.CharField(max_length=255)
+    civil_id     = models.CharField(max_length=12, validators=[civil_id_validator], null=True, blank=True)
+    phone_number = models.CharField(max_length=8, validators=[phone_number_validator], null=True, blank=True)
 
     def __str__(self):
         return self.name
