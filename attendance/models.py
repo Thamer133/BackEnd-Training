@@ -39,7 +39,9 @@ class SickLeave(models.Model):
 class ActivityLog(models.Model):
     ACTION_CHOICES = [
         ('create', 'إضافة'),
+        ('update', 'تعديل'),
         ('delete', 'حذف'),
+        ('view',   'عرض'),
     ]
     # القسم/الجدول اللي صار فيه التعديل — يظهر بعمود منفصل بالأدمن جنب IP
     SOURCE_CHOICES = [
@@ -47,6 +49,8 @@ class ActivityLog(models.Model):
         ('excuse',     'الاستئذانات'),
         ('sick_leave', 'الطبيات'),
         ('vacation',   'الإجازات'),
+        ('employee',   'الموظفين'),
+        ('supervisor', 'المسؤولين'),
         ('other',      'أخرى'),
     ]
     action      = models.CharField(max_length=10, choices=ACTION_CHOICES)

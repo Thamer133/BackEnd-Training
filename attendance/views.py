@@ -32,46 +32,90 @@ def get_client_ip(request):
     return request.META.get('REMOTE_ADDR')
 
 
-# GET ALL EMPLOYEES
-@api_view(['GET'])
+# GET ALL EMPLOYEES — POST (إضافة موظف جديد)
+@api_view(['GET', 'POST'])
 def employee_list(request):
-    civil_id     = request.query_params.get('civil_id', '').strip()
-    name         = request.query_params.get('name', '').strip()
-    phone_number = request.query_params.get('phone_number', '').strip()
+    if request.method == 'GET':
+        civil_id     = request.query_params.get('civil_id', '').strip()
+        name         = request.query_params.get('name', '').strip()
+        phone_number = request.query_params.get('phone_number', '').strip()
 
-    employees = Employee.objects.all().order_by('name')
-    if civil_id:
-        employees = employees.filter(civil_id__icontains=civil_id)
-    if name:
-        employees = employees.filter(name__icontains=name)
-    if phone_number:
-        employees = employees.filter(phone_number__icontains=phone_number)
+        employees = Employee.objects.all().order_by('name')
+        if civil_id:
+            employees = employees.filter(civil_id__icontains=civil_id)
+        if name:
+            employees = employees.filter(name__icontains=name)
+        if phone_number:
+            employees = employees.filter(phone_number__icontains=phone_number)
 
-    serializer = EmployeeSerializer(employees, many=True)
-    return Response(serializer.data)
+        search_terms = ", ".join(f"{k}={v}" for k, v in [("civil_id", civil_id), ("name", name), ("phone_number", phone_number)] if v)
+        ActivityLog.objects.create(
+            action='view',
+            description=f"تم عرض/بحث بقائمة الموظفين{f' ({search_terms})' if search_terms else ''} — {employees.count()} نتيجة",
+            source='employee',
+            ip_address=get_client_ip(request),
+        )
+
+        serializer = EmployeeSerializer(employees, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = EmployeeSerializer(data=request.data)
+        if serializer.is_valid():
+            employee = serializer.save()
+            ActivityLog.objects.create(
+                action='create',
+                description=f"تم إضافة موظف جديد: {employee.name}",
+                source='employee',
+                ip_address=get_client_ip(request),
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# GET ALL SUPERVISORS (المسؤولين — تُعبّى يدوياً من لوحة الأدمن)
-@api_view(['GET'])
+# GET ALL SUPERVISORS (المسؤولين — تُعبّى يدوياً من لوحة الأدمن) — POST (إضافة مسؤول جديد)
+@api_view(['GET', 'POST'])
 def supervisor_list(request):
-    civil_id     = request.query_params.get('civil_id', '').strip()
-    name         = request.query_params.get('name', '').strip()
-    phone_number = request.query_params.get('phone_number', '').strip()
+    if request.method == 'GET':
+        civil_id     = request.query_params.get('civil_id', '').strip()
+        name         = request.query_params.get('name', '').strip()
+        phone_number = request.query_params.get('phone_number', '').strip()
 
-    supervisors = Supervisor.objects.all().order_by('name')
-    if civil_id:
-        supervisors = supervisors.filter(civil_id__icontains=civil_id)
-    if name:
-        supervisors = supervisors.filter(name__icontains=name)
-    if phone_number:
-        supervisors = supervisors.filter(phone_number__icontains=phone_number)
+        supervisors = Supervisor.objects.all().order_by('name')
+        if civil_id:
+            supervisors = supervisors.filter(civil_id__icontains=civil_id)
+        if name:
+            supervisors = supervisors.filter(name__icontains=name)
+        if phone_number:
+            supervisors = supervisors.filter(phone_number__icontains=phone_number)
 
-    serializer = SupervisorSerializer(supervisors, many=True)
-    return Response(serializer.data)
+        search_terms = ", ".join(f"{k}={v}" for k, v in [("civil_id", civil_id), ("name", name), ("phone_number", phone_number)] if v)
+        ActivityLog.objects.create(
+            action='view',
+            description=f"تم عرض/بحث بقائمة المسؤولين{f' ({search_terms})' if search_terms else ''} — {supervisors.count()} نتيجة",
+            source='supervisor',
+            ip_address=get_client_ip(request),
+        )
+
+        serializer = SupervisorSerializer(supervisors, many=True)
+        return Response(serializer.data)
+
+    elif request.method == 'POST':
+        serializer = SupervisorSerializer(data=request.data)
+        if serializer.is_valid():
+            supervisor = serializer.save()
+            ActivityLog.objects.create(
+                action='create',
+                description=f"تم إضافة مسؤول جديد: {supervisor.name}",
+                source='supervisor',
+                ip_address=get_client_ip(request),
+            )
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-# GET (سجل واحد) — PATCH (تعديل جزئي: اسم/رقم مدني/تلفون) — DELETE (حذف موظف)
-@api_view(['GET', 'PATCH', 'DELETE'])
+# GET (سجل واحد) — PUT (تعديل كامل) — PATCH (تعديل جزئي) — DELETE (حذف موظف)
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def employee_detail(request, pk):
     try:
         employee = Employee.objects.get(pk=pk)
@@ -79,23 +123,45 @@ def employee_detail(request, pk):
         return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
+        ActivityLog.objects.create(
+            action='view',
+            description=f"تم عرض بيانات الموظف {employee.name}",
+            source='employee',
+            ip_address=get_client_ip(request),
+        )
         serializer = EmployeeSerializer(employee)
         return Response(serializer.data)
 
-    elif request.method == 'PATCH':
-        serializer = EmployeeSerializer(employee, data=request.data, partial=True)
+    elif request.method in ('PUT', 'PATCH'):
+        old_name = employee.name
+        is_partial = request.method == 'PATCH'
+        serializer = EmployeeSerializer(employee, data=request.data, partial=is_partial)
         if serializer.is_valid():
             serializer.save()
+            changed_fields = ", ".join(request.data.keys())
+            ActivityLog.objects.create(
+                action='update',
+                description=f"تم تعديل بيانات الموظف {old_name} (الحقول: {changed_fields})",
+                source='employee',
+                ip_address=get_client_ip(request),
+            )
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
+        employee_name = employee.name
         employee.delete()
+        ActivityLog.objects.create(
+            action='delete',
+            description=f"تم حذف الموظف {employee_name}",
+            source='employee',
+            ip_address=get_client_ip(request),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# GET (سجل واحد) — PATCH (تعديل جزئي: اسم/رقم مدني/تلفون) — DELETE (حذف مسؤول)
-@api_view(['GET', 'PATCH', 'DELETE'])
+# GET (سجل واحد) — PUT (تعديل كامل) — PATCH (تعديل جزئي) — DELETE (حذف مسؤول)
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def supervisor_detail(request, pk):
     try:
         supervisor = Supervisor.objects.get(pk=pk)
@@ -103,18 +169,40 @@ def supervisor_detail(request, pk):
         return Response({"error": "المسؤول غير موجود"}, status=status.HTTP_404_NOT_FOUND)
 
     if request.method == 'GET':
+        ActivityLog.objects.create(
+            action='view',
+            description=f"تم عرض بيانات المسؤول {supervisor.name}",
+            source='supervisor',
+            ip_address=get_client_ip(request),
+        )
         serializer = SupervisorSerializer(supervisor)
         return Response(serializer.data)
 
-    elif request.method == 'PATCH':
-        serializer = SupervisorSerializer(supervisor, data=request.data, partial=True)
+    elif request.method in ('PUT', 'PATCH'):
+        old_name = supervisor.name
+        is_partial = request.method == 'PATCH'
+        serializer = SupervisorSerializer(supervisor, data=request.data, partial=is_partial)
         if serializer.is_valid():
             serializer.save()
+            changed_fields = ", ".join(request.data.keys())
+            ActivityLog.objects.create(
+                action='update',
+                description=f"تم تعديل بيانات المسؤول {old_name} (الحقول: {changed_fields})",
+                source='supervisor',
+                ip_address=get_client_ip(request),
+            )
             return Response(serializer.data)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     elif request.method == 'DELETE':
+        supervisor_name = supervisor.name
         supervisor.delete()
+        ActivityLog.objects.create(
+            action='delete',
+            description=f"تم حذف المسؤول {supervisor_name}",
+            source='supervisor',
+            ip_address=get_client_ip(request),
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -474,5 +562,11 @@ def employee_full_profile(request):
             "excuses": ExcuseSerializer(excuses, many=True).data,
             "vacations": VacationSerializer(vacations, many=True).data,
         })
+        ActivityLog.objects.create(
+            action='view',
+            description=f"تم عرض الملف الشامل (كل السجلات) للموظف {employee.name}",
+            source='employee',
+            ip_address=get_client_ip(request),
+        )
 
     return Response(results, status=status.HTTP_200_OK)
