@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -570,3 +570,122 @@ def employee_full_profile(request):
         )
 
     return Response(results, status=status.HTTP_200_OK)
+
+
+# GET — تقارير موحّدة: إجازات / طبيات / استئذانات — بمعيار "type" واحد
+# يحدد نوع السجل، مع فلترة اختيارية بمدى تاريخ (from/to) — وللإجازات بس، فلترة
+# إضافية بنوع الإجازة (vecation_type: دورية/طارئة).
+#
+# أمثلة استخدام (نفس صيغة DD-MM-YYYY للتواريخ):
+#   /api/attendance/reports/?type=vacations&vecation_type=دورية&from=25-04-2025&to=25-05-2025
+#   /api/attendance/reports/?type=sick_leaves&from=20-04-2025&to=25-05-2025
+#   /api/attendance/reports/?type=excuses&from=20-04-2025&to=25-05-2025
+VACATION_TYPE_LABEL_TO_CODE = {
+    'دورية': 'periodic',
+    'طارئة': 'emergency',
+    'periodic': 'periodic',
+    'emergency': 'emergency',
+}
+
+
+def _parse_ddmmyyyy(value):
+    try:
+        return datetime.strptime(value, '%d-%m-%Y').date()
+    except ValueError:
+        return None
+
+
+@api_view(['GET'])
+def reports(request):
+    report_type   = request.query_params.get('type', '').strip()
+    date_from_str = request.query_params.get('from', '').strip()
+    date_to_str   = request.query_params.get('to', '').strip()
+
+    parsed_from = None
+    parsed_to = None
+
+    if date_from_str:
+        parsed_from = _parse_ddmmyyyy(date_from_str)
+        if not parsed_from:
+            return Response({"error": "صيغة تاريخ from غير صحيحة، استخدم DD-MM-YYYY (مثال: 25-04-2025)"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if date_to_str:
+        parsed_to = _parse_ddmmyyyy(date_to_str)
+        if not parsed_to:
+            return Response({"error": "صيغة تاريخ to غير صحيحة، استخدم DD-MM-YYYY (مثال: 25-05-2025)"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if report_type == 'vacations':
+        vacation_type_param = request.query_params.get('vecation_type', '').strip()
+        queryset = Vacation.objects.select_related('employee').all()
+
+        if vacation_type_param:
+            code = VACATION_TYPE_LABEL_TO_CODE.get(vacation_type_param)
+            if not code:
+                return Response({"error": "نوع الإجازة (vecation_type) يجب أن يكون 'دورية' أو 'طارئة'"}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(vacation_type=code)
+
+        if parsed_from:
+            queryset = queryset.filter(date_from__gte=parsed_from)
+        if parsed_to:
+            queryset = queryset.filter(date_from__lte=parsed_to)
+
+        queryset = queryset.order_by('date_from')
+        results_data = VacationSerializer(queryset, many=True).data
+        source_label = 'vacation'
+
+    elif report_type == 'sick_leaves':
+        queryset = SickLeave.objects.select_related('employee').all()
+
+        if parsed_from:
+            queryset = queryset.filter(date__gte=parsed_from)
+        if parsed_to:
+            queryset = queryset.filter(date__lte=parsed_to)
+
+        queryset = queryset.order_by('date')
+        results_data = SickLeaveSerializer(queryset, many=True).data
+        source_label = 'sick_leave'
+
+    elif report_type == 'excuses':
+        queryset = Excuse.objects.select_related('employee').all()
+
+        if parsed_from:
+            queryset = queryset.filter(date__gte=parsed_from)
+        if parsed_to:
+            queryset = queryset.filter(date__lte=parsed_to)
+
+        queryset = queryset.order_by('date')
+        results_data = ExcuseSerializer(queryset, many=True).data
+        source_label = 'excuse'
+
+    else:
+        return Response(
+            {"error": "الرجاء تحديد type بقيمة صحيحة: vacations أو sick_leaves أو excuses"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    count = queryset.count()
+
+    REPORT_TYPE_ARABIC_LABEL = {
+        'vacations':   'إجازات',
+        'sick_leaves': 'طبيات',
+        'excuses':     'استئذانات',
+    }
+    report_type_label = REPORT_TYPE_ARABIC_LABEL.get(report_type, report_type)
+
+    ActivityLog.objects.create(
+        action='view',
+        description=(
+            f"تم توليد تقرير {report_type_label} من {date_from_str or 'البداية'} "
+            f"إلى {date_to_str or 'الآن'} — {count} نتيجة"
+        ),
+        source=source_label,
+        ip_address=get_client_ip(request),
+    )
+
+    return Response({
+        "type": report_type,
+        "from": date_from_str or None,
+        "to": date_to_str or None,
+        "count": count,
+        "results": results_data,
+    }, status=status.HTTP_200_OK)
