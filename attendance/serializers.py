@@ -32,12 +32,20 @@ class ActivityLogSerializer(serializers.ModelSerializer):
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
-    employee_name  = serializers.CharField(source='employee.name', read_only=True)
-    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    employee_name       = serializers.CharField(source='employee.name', read_only=True)
+    action_display      = serializers.CharField(source='get_action_display', read_only=True)
+    late_minutes_display = serializers.SerializerMethodField()
+
+    def get_late_minutes_display(self, obj):
+        from .views import minutes_to_hm_label
+        return minutes_to_hm_label(obj.late_minutes) if obj.late_minutes else None
 
     class Meta:
         model = AttendanceRecord
-        fields = ['id', 'employee', 'employee_name', 'action', 'action_display', 'timestamp']
+        fields = [
+            'id', 'employee', 'employee_name', 'action', 'action_display', 'timestamp',
+            'late_minutes', 'late_minutes_display',
+        ]
 
 
 class ExcuseSerializer(serializers.ModelSerializer):

@@ -1,4 +1,7 @@
-from datetime import date, datetime
+from datetime import date, datetime, time as dt_time
+from zoneinfo import ZoneInfo
+from django.db.models import Sum
+from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
@@ -18,6 +21,61 @@ ATTENDANCE_WINDOW = 30  # آخر 30 عملية بس تنعرض
 MONTHLY_EXCUSE_LIMIT = 4
 PERIODIC_VACATION_YEARLY_LIMIT  = 35
 EMERGENCY_VACATION_YEARLY_LIMIT = 4
+
+# ══ نظام دقايق التأخير وأيام الدوام ══
+# فترة الحضور المسموحة: 7:30 - 8:00 (بدون تأخير) — من 8:01 يبدأ احتساب التأخير
+CHECK_IN_ON_TIME_END    = dt_time(8, 0)
+# فترة الانصراف المسموحة: تبدأ 1:30 وتضل مفتوحة بعدها بدون وقت إغلاق — قبل 1:30 ممنوع تماماً
+CHECK_OUT_ON_TIME_START = dt_time(13, 30)
+
+YEARLY_LATE_MINUTES_LIMIT  = 7 * 60  # 7 ساعات = 420 دقيقة بالسنة — بعدها إشعار "تجاوز الحد الأقصى"
+YEARLY_WORKDAYS_MIN_TARGET = 180     # 180 يوم عمل بالسنة — الحد الأدنى للدوام
+
+# توقيت الكويت ثابت (UTC+3) — نحوّل له مباشرة بدل الاعتماد على settings.TIME_ZONE
+# (لو الإعداد مو مضبوط بالضبط على الكويت بيصير فرق ساعات بكل حسابات التأخير)
+KUWAIT_TZ = ZoneInfo("Asia/Kuwait")
+
+
+def to_local_time(dt):
+    """يحوّل أي datetime (aware أو naive) لتوقيت الكويت المحلي مباشرة."""
+    if dj_timezone.is_naive(dt):
+        dt = dj_timezone.make_aware(dt, timezone=dj_timezone.utc)
+    return dt.astimezone(KUWAIT_TZ)
+
+
+def calculate_late_minutes(action, local_dt):
+    """
+    يحسب دقايق التأخير لعملية حضور أو انصراف واحدة حسب وقتها المحلي (local_dt هو
+    datetime بتوقيت الكويت الفعلي، مو UTC). الثواني تُهمل (تُقرّب للدقيقة الأقل).
+    - حضور: بعد 8:00 بالضبط يُحسب تأخير = (وقت الحضور - 8:00) بالدقايق.
+    - انصراف: قبل 1:30 بالضبط يُحسب تأخير (خروج مبكر) = (1:30 - وقت الانصراف) بالدقايق.
+    """
+    t = local_dt.time().replace(second=0, microsecond=0)
+
+    if action == 'check_in':
+        if t <= CHECK_IN_ON_TIME_END:
+            return 0
+        cutoff = local_dt.replace(hour=8, minute=0, second=0, microsecond=0)
+        return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
+
+    if action == 'check_out':
+        if t >= CHECK_OUT_ON_TIME_START:
+            return 0
+        cutoff = local_dt.replace(hour=13, minute=30, second=0, microsecond=0)
+        return max(int((cutoff - local_dt.replace(second=0, microsecond=0)).total_seconds() // 60), 0)
+
+    return 0
+
+
+def minutes_to_hm_label(total_minutes):
+    """يحوّل عدد دقايق لصيغة نصية بالساعات والدقايق (مثال: 100 → 'ساعة و 40 دقيقة')."""
+    total_minutes = int(total_minutes or 0)
+    hours, minutes = divmod(total_minutes, 60)
+    if hours and minutes:
+        return f"{hours} ساعة و {minutes} دقيقة"
+    if hours:
+        return f"{hours} ساعة"
+    return f"{minutes} دقيقة"
 
 
 def get_client_ip(request):
@@ -309,15 +367,117 @@ def attendance_record_list(request):
         except Employee.DoesNotExist:
             return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
 
+        # الانصراف يفتح بداية من الساعة 1:30 ويضل مفتوح بعدها (بدون وقت إغلاق) —
+        # قبل 1:30 ممنوع تماماً حتى لو الموظف مسجّل حضور.
+        if action == 'check_out':
+            now_local = to_local_time(dj_timezone.now())
+            if now_local.time() < CHECK_OUT_ON_TIME_START:
+                return Response(
+                    {"error": "لا يمكن تسجيل الانصراف قبل الساعة 1:30"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         record = AttendanceRecord.objects.create(employee=employee, action=action)
+        local_dt = to_local_time(record.timestamp)
+        record.late_minutes = calculate_late_minutes(action, local_dt)
+        if record.late_minutes:
+            record.save(update_fields=['late_minutes'])
+
+        late_note = f" — متأخر {record.late_minutes} دقيقة ({minutes_to_hm_label(record.late_minutes)})" if record.late_minutes else ""
         ActivityLog.objects.create(
             action='create',
-            description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}",
+            description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}{late_note}",
             source='attendance',
             ip_address=get_client_ip(request),
         )
         serializer = AttendanceRecordSerializer(record)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+
+# GET — إحصائيات دقايق التأخير وأيام الدوام السنوية لموظف معين.
+# الاحتساب دايماً على أساس السنة الميلادية الحالية تلقائياً (بدون أي زر Reset يدوي) —
+# بمجرد ما تدخل سنة ميلادية جديدة تبدأ الأرقام من الصفر لوحدها، وسجلات السنوات
+# القديمة تضل محفوظة بالكامل بقاعدة البيانات وتُقرأ بفلتر ?year= عشان الرجوع لها.
+# مثال: /api/attendance/attendance-stats/?employee_name=ثامر فريد&year=2025
+@api_view(['GET'])
+def attendance_stats(request):
+    employee_name = request.query_params.get('employee_name', '').strip()
+    year_param    = request.query_params.get('year', '').strip()
+
+    if not employee_name:
+        return Response({"error": "الرجاء تحديد employee_name"}, status=status.HTTP_400_BAD_REQUEST)
+
+    employee = Employee.objects.filter(name=employee_name).first()
+    if not employee:
+        return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+    current_year = date.today().year
+    if year_param:
+        try:
+            year = int(year_param)
+        except ValueError:
+            return Response({"error": "سنة غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        year = current_year
+
+    all_records = AttendanceRecord.objects.filter(employee=employee)
+
+    # نفلتر بالسنة اعتماداً على توقيت الكويت المحسوب يدوياً (مو فلتر __year بقاعدة
+    # البيانات) — عشان نتفادى أي فرق ساعات قريب من منتصف الليل بنهاية السنة لو
+    # إعداد settings.TIME_ZONE مو مضبوط بالضبط على الكويت.
+    total_late_minutes = 0
+    days_actions = {}
+    checkout_ontime_days = set()
+    all_years = set()
+
+    for rec_action, rec_timestamp, rec_late in all_records.values_list('action', 'timestamp', 'late_minutes'):
+        local_dt = to_local_time(rec_timestamp)
+        all_years.add(local_dt.year)
+        if local_dt.year != year:
+            continue
+        total_late_minutes += rec_late or 0
+        local_date = local_dt.date()
+        days_actions.setdefault(local_date, set()).add(rec_action)
+        if rec_action == 'check_out' and local_dt.time() >= CHECK_OUT_ON_TIME_START:
+            checkout_ontime_days.add(local_date)
+
+    # يوم عمل = يوم فيه حضور وانصراف بنفس اليوم الميلادي، وانصراف مسجّل بفترة
+    # نهاية الدوام الرسمية (1:30 فأعلى — الانصراف ما يصير يتسجل أصلاً قبلها)
+    workdays_count = sum(
+        1 for d, actions in days_actions.items()
+        if {'check_in', 'check_out'}.issubset(actions) and d in checkout_ontime_days
+    )
+
+    available_years = sorted(all_years, reverse=True)
+    if current_year not in available_years:
+        available_years.insert(0, current_year)
+
+    exceeded_late_limit    = total_late_minutes > YEARLY_LATE_MINUTES_LIMIT
+    reached_min_attendance = workdays_count >= YEARLY_WORKDAYS_MIN_TARGET
+
+    ActivityLog.objects.create(
+        action='view',
+        description=f"تم عرض إحصائيات التأخير/الدوام لسنة {year} للموظف {employee.name}",
+        source='attendance',
+        ip_address=get_client_ip(request),
+    )
+
+    return Response({
+        "employee": employee.name,
+        "year": year,
+        "is_current_year": year == current_year,
+        "total_late_minutes": total_late_minutes,
+        "total_late_display": minutes_to_hm_label(total_late_minutes),
+        "workdays_count": workdays_count,
+        "workdays_target": YEARLY_WORKDAYS_MIN_TARGET,
+        "alerts": {
+            "exceeded_late_limit": exceeded_late_limit,
+            "late_limit_minutes": YEARLY_LATE_MINUTES_LIMIT,
+            "late_limit_display": minutes_to_hm_label(YEARLY_LATE_MINUTES_LIMIT),
+            "reached_min_attendance": reached_min_attendance,
+        },
+        "available_years": available_years,
+    }, status=status.HTTP_200_OK)
 
 
 # GET (كل استئذانات موظف معين) — POST (تسجيل استئذان جديد)
@@ -572,14 +732,16 @@ def employee_full_profile(request):
     return Response(results, status=status.HTTP_200_OK)
 
 
-# GET — تقارير موحّدة: إجازات / طبيات / استئذانات — بمعيار "type" واحد
+# GET — تقارير موحّدة: إجازات / طبيات / استئذانات / حضور وانصراف — بمعيار "type" واحد
 # يحدد نوع السجل، مع فلترة اختيارية بمدى تاريخ (from/to) — وللإجازات بس، فلترة
-# إضافية بنوع الإجازة (vecation_type: دورية/طارئة).
+# إضافية بنوع الإجازة (vecation_type: دورية/طارئة)، وللحضور والانصراف بس، فلترة
+# إضافية بنوع العملية (action: حضور/انصراف).
 #
 # أمثلة استخدام (نفس صيغة DD-MM-YYYY للتواريخ):
 #   /api/attendance/reports/?type=vacations&vecation_type=دورية&from=25-04-2025&to=25-05-2025
 #   /api/attendance/reports/?type=sick_leaves&from=20-04-2025&to=25-05-2025
 #   /api/attendance/reports/?type=excuses&from=20-04-2025&to=25-05-2025
+#   /api/attendance/reports/?type=attendance_records&action=حضور&from=20-04-2025&to=25-05-2025
 VACATION_TYPE_LABEL_TO_CODE = {
     'دورية': 'periodic',
     'طارئة': 'emergency',
@@ -657,18 +819,50 @@ def reports(request):
         results_data = ExcuseSerializer(queryset, many=True).data
         source_label = 'excuse'
 
+    elif report_type == 'attendance_records':
+        action_param = request.query_params.get('action', '').strip()
+        ACTION_LABEL_TO_CODE = {
+            'حضور':     'check_in',
+            'انصراف':   'check_out',
+            'check_in':  'check_in',
+            'check_out': 'check_out',
+        }
+
+        queryset = AttendanceRecord.objects.select_related('employee').all()
+
+        if action_param:
+            action_code = ACTION_LABEL_TO_CODE.get(action_param)
+            if not action_code:
+                return Response({"error": "action يجب أن يكون 'حضور' أو 'انصراف'"}, status=status.HTTP_400_BAD_REQUEST)
+            queryset = queryset.filter(action=action_code)
+
+        # نفلتر بمدى التاريخ اعتماداً على توقيت الكويت المحسوب يدوياً (نفس منطق باقي
+        # نظام الحضور) بدل فلتر __date بقاعدة البيانات، تفادياً لأي فرق ساعات.
+        if parsed_from or parsed_to:
+            ids_in_range = [
+                rec_id for rec_id, ts in queryset.values_list('id', 'timestamp')
+                if (not parsed_from or to_local_time(ts).date() >= parsed_from)
+                and (not parsed_to or to_local_time(ts).date() <= parsed_to)
+            ]
+            queryset = queryset.filter(id__in=ids_in_range)
+
+        queryset = queryset.order_by('-timestamp')
+        results_data = AttendanceRecordSerializer(queryset, many=True).data
+        source_label = 'attendance'
+
     else:
         return Response(
-            {"error": "الرجاء تحديد type بقيمة صحيحة: vacations أو sick_leaves أو excuses"},
+            {"error": "الرجاء تحديد type بقيمة صحيحة: vacations أو sick_leaves أو excuses أو attendance_records"},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
     count = queryset.count()
 
     REPORT_TYPE_ARABIC_LABEL = {
-        'vacations':   'إجازات',
-        'sick_leaves': 'طبيات',
-        'excuses':     'استئذانات',
+        'vacations':          'إجازات',
+        'sick_leaves':        'طبيات',
+        'excuses':            'استئذانات',
+        'attendance_records': 'حضور وانصراف',
     }
     report_type_label = REPORT_TYPE_ARABIC_LABEL.get(report_type, report_type)
 

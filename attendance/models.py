@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import RegexValidator
+from django.utils import timezone
 
 # تحقق: رقم التلفون لازم يكون 8 أرقام بالضبط (بدون مسافات أو رموز)
 phone_number_validator = RegexValidator(
@@ -71,9 +72,14 @@ class AttendanceRecord(models.Model):
         ('check_in', 'حضور'),
         ('check_out', 'انصراف'),
     ]
-    employee  = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attendance_records')
-    action    = models.CharField(max_length=10, choices=ACTION_CHOICES)
-    timestamp = models.DateTimeField(auto_now_add=True)
+    employee     = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name='attendance_records')
+    action       = models.CharField(max_length=10, choices=ACTION_CHOICES)
+    # مو auto_now_add عشان يصير تعديله يدوياً من لوحة الأدمن فقط (الـ API ما يسمح
+    # بتعديله — بس POST جديد). القيمة الافتراضية وقت الحفظ الفعلي، بدون أي تغيير
+    # بالسلوك الحالي إلا لو حد عدّله يدوياً بالأدمن.
+    timestamp    = models.DateTimeField(default=timezone.now)
+    # دقايق التأخير المحتسبة لهذه العملية بالذات (حضور بعد 8:00 أو انصراف قبل 1:30) — تُحسب وقت الإنشاء بـ views.py
+    late_minutes = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-timestamp']

@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
+from .views import calculate_late_minutes, to_local_time
 
 
 @admin.register(Employee)
@@ -34,9 +35,18 @@ class ActivityLogAdmin(admin.ModelAdmin):
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'action', 'timestamp']
+    list_display = ['employee', 'action', 'timestamp', 'late_minutes']
     list_filter = ['employee', 'action']
     search_fields = ['employee__name']
+    # timestamp صار حقل عادي قابل للتعديل (مو auto_now_add) — يعني يظهر بفورم
+    # الإضافة/التعديل بلوحة الأدمن وتقدر تختار الوقت يدوياً من هني بس.
+
+    def save_model(self, request, obj, form, change):
+        # نعيد احتساب دقايق التأخير تلقائياً كل مرة يتغيّر فيها وقت الحضور/الانصراف
+        # يدوياً من الأدمن، عشان الإحصائيات تضل صحيحة ومتوافقة مع الوقت الجديد.
+        local_dt = to_local_time(obj.timestamp)
+        obj.late_minutes = calculate_late_minutes(obj.action, local_dt)
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Excuse)
