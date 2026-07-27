@@ -1,6 +1,6 @@
 from datetime import date, datetime, time as dt_time
 from zoneinfo import ZoneInfo
-from django.db.models import Sum
+from django.db.models import Q
 from django.utils import timezone as dj_timezone
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
@@ -19,14 +19,18 @@ from .serializers import (
 SICK_LEAVE_LIMIT = 15
 ATTENDANCE_WINDOW = 30  # آخر 30 عملية بس تنعرض
 MONTHLY_EXCUSE_LIMIT = 4
+MAX_EXCUSE_HOURS_PER_DAY   = 3                                    # أقصى مدة للاستئذان الواحد
+MONTHLY_EXCUSE_HOURS_LIMIT = MAX_EXCUSE_HOURS_PER_DAY * MONTHLY_EXCUSE_LIMIT * 60  # 12 ساعة = 720 دقيقة بالشهر (بالدقايق)
 PERIODIC_VACATION_YEARLY_LIMIT  = 35
 EMERGENCY_VACATION_YEARLY_LIMIT = 4
 
 # ══ نظام دقايق التأخير وأيام الدوام ══
 # فترة الحضور المسموحة: 7:30 - 8:00 (بدون تأخير) — من 8:01 يبدأ احتساب التأخير
 CHECK_IN_ON_TIME_END    = dt_time(8, 0)
-# فترة الانصراف المسموحة: تبدأ 1:30 وتضل مفتوحة بعدها بدون وقت إغلاق — قبل 1:30 ممنوع تماماً
+# فترة الانصراف المسموحة بدون تأخير: 1:30 - 2:30 — قبل 1:30 ممنوع تماماً تسجيله،
+# وبعد 2:30 بنفس اليوم يُحسب تأخير (الفرق بين 2:30 ووقت الانصراف الفعلي).
 CHECK_OUT_ON_TIME_START = dt_time(13, 30)
+CHECK_OUT_ON_TIME_END   = dt_time(14, 30)
 
 YEARLY_LATE_MINUTES_LIMIT  = 7 * 60  # 7 ساعات = 420 دقيقة بالسنة — بعدها إشعار "تجاوز الحد الأقصى"
 YEARLY_WORKDAYS_MIN_TARGET = 180     # 180 يوم عمل بالسنة — الحد الأدنى للدوام
@@ -43,28 +47,162 @@ def to_local_time(dt):
     return dt.astimezone(KUWAIT_TZ)
 
 
-def calculate_late_minutes(action, local_dt):
+def _parse_time_string(value):
+    """
+    يحاول يفهم صيغة وقت مرنة من اللي مخزّن بحقل Excuse.time_from/time_to (نص حر
+    زي '10:30' أو '10:30 AM' أو '10:30 ص' أو '02:30 م'). يرجع datetime.time أو
+    None لو ما قدر يفهم الصيغة (بدون ما يوقف باقي المنطق).
+    """
+    if not value:
+        return None
+    raw = str(value).strip()
+    normalized = (
+        raw.replace('صباحاً', 'AM').replace('صباحا', 'AM').replace('ص', 'AM')
+           .replace('مساءً', 'PM').replace('مساءا', 'PM').replace('م', 'PM')
+    )
+    for candidate in (raw, normalized):
+        for fmt in ('%H:%M', '%I:%M %p', '%I:%M%p', '%H:%M:%S'):
+            try:
+                return datetime.strptime(candidate.strip(), fmt).time()
+            except ValueError:
+                continue
+    return None
+
+
+def _excuse_duration_minutes(time_from, time_to):
+    """
+    يحسب مدة الاستئذان بالدقايق من نصوص الوقت الحرة (time_from/time_to). يرجع
+    None لو ما قدر يفهم أي وحد منهم (بدون ما يوقف باقي المنطق). لو النهاية قبل
+    البداية (خطأ إدخال) يرجع None بدل رقم سالب.
+    """
+    parsed_from = _parse_time_string(time_from)
+    parsed_to = _parse_time_string(time_to)
+    if not parsed_from or not parsed_to:
+        return None
+    anchor = date.today()
+    minutes = int((datetime.combine(anchor, parsed_to) - datetime.combine(anchor, parsed_from)).total_seconds() // 60)
+    return minutes if minutes > 0 else None
+
+
+def _checkin_effective_cutoff(employee, local_date):
+    """
+    وقت القطع الفعلي لحضور هذا اليوم لهذا الموظف — عادةً 8:00، إلا لو عنده
+    استئذان "بداية الدوام" بنفس اليوم ينتهي بعد 8:00؛ حينها القطع يمتد لوقت
+    نهاية الاستئذان — نفس منطق الانصراف بالضبط: بالوقت أو قبله = صفر تأخير،
+    وأي دقيقة بعده تُحسب تأخير فوراً بدون فترة سماح.
+    نفلتر بـ period='بداية الدوام' فقط عشان استئذان نهاية الدوام ما يأثر على
+    حساب الحضور بالغلط.
+    """
+    cutoff = CHECK_IN_ON_TIME_END
+    for excuse in Excuse.objects.filter(employee=employee, date=local_date, period='بداية الدوام'):
+        parsed_to = _parse_time_string(excuse.time_to)
+        if parsed_to and parsed_to > cutoff:
+            cutoff = parsed_to
+    return cutoff
+
+
+def _checkout_excuse_cutoff(employee, local_date):
+    """
+    لو عند الموظف استئذان "نهاية الدوام" بنفس اليوم يبدأ قبل 1:30، وقت بداية
+    الاستئذان يصير هو "الموعد المتوقع" للانصراف — انصراف بالضبط بهذا الوقت أو
+    قبله = بدون تأخير، وأي دقيقة بعده تُحسب تأخير فوراً (بدون أي فترة سماح زي
+    القاعدة العادية 1:30-2:30). يرجع None لو ما فيه استئذان من هالنوع، فترجع
+    القاعدة العادية.
+    نفلتر بـ period='نهاية الدوام' فقط عشان استئذان بداية الدوام ما يأثر على
+    حساب الانصراف بالغلط.
+    """
+    earliest = None
+    for excuse in Excuse.objects.filter(employee=employee, date=local_date, period='نهاية الدوام'):
+        parsed_from = _parse_time_string(excuse.time_from)
+        if parsed_from and parsed_from < CHECK_OUT_ON_TIME_START:
+            if earliest is None or parsed_from < earliest:
+                earliest = parsed_from
+    return earliest
+
+
+def _exemption_reason(employee, local_date):
+    """
+    يرجّع سبب إعفاء هذا اليوم من احتساب التأخير — 'sick_leave' أو 'vacation' أو
+    None لو مافيه إعفاء. مفيدة لتتبّع سبب أي صفر تأخير غير متوقع (تُسجّل بسجل الأنشطة).
+    """
+    if SickLeave.objects.filter(employee=employee, date=local_date).exists():
+        return 'sick_leave'
+
+    accepted_vacation_covers_day = Vacation.objects.filter(
+        employee=employee, status='accepted', date_from__lte=local_date,
+    ).filter(
+        Q(date_to__gte=local_date) | Q(date_to__isnull=True, date_from=local_date)
+    ).exists()
+    if accepted_vacation_covers_day:
+        return 'vacation'
+
+    return None
+
+
+def _is_exempt_day(employee, local_date):
+    """
+    يوم فيه طبية مسجّلة، أو إجازة (دورية أو طارئة) مقبولة تغطي هذا التاريخ =
+    يوم معفى بالكامل من احتساب أي دقايق تأخير — لأنه أصلاً يوم إجازة مرضية أو
+    إجازة رسمية، مو يوم دوام عادي.
+    """
+    return _exemption_reason(employee, local_date) is not None
+
+
+def calculate_late_minutes(action, local_dt, checkin_cutoff=None, checkout_excuse_cutoff=None):
     """
     يحسب دقايق التأخير لعملية حضور أو انصراف واحدة حسب وقتها المحلي (local_dt هو
     datetime بتوقيت الكويت الفعلي، مو UTC). الثواني تُهمل (تُقرّب للدقيقة الأقل).
-    - حضور: بعد 8:00 بالضبط يُحسب تأخير = (وقت الحضور - 8:00) بالدقايق.
-    - انصراف: قبل 1:30 بالضبط يُحسب تأخير (خروج مبكر) = (1:30 - وقت الانصراف) بالدقايق.
+    - حضور: بعد checkin_cutoff (افتراضياً 8:00، أو وقت نهاية استئذان اليوم لو
+      موجود) يُحسب تأخير = (وقت الحضور - القطع) بالدقايق.
+    - انصراف بدون استئذان: قبل 1:30 يُحسب تأخير (خروج مبكر)، بعد 2:30 يُحسب
+      تأخير (خروج متأخر)، وبينهم صفر تأخير.
+    - انصراف بيوم فيه استئذان نهاية دوام (checkout_excuse_cutoff): وقت
+      الاستئذان نفسه يصير الموعد المتوقع بالضبط — انصراف بهذا الوقت أو قبله =
+      صفر تأخير، وأي دقيقة بعده تُحسب تأخير فوراً بدون أي فترة سماح.
     """
+    cutoff_time = checkin_cutoff or CHECK_IN_ON_TIME_END
     t = local_dt.time().replace(second=0, microsecond=0)
 
     if action == 'check_in':
-        if t <= CHECK_IN_ON_TIME_END:
+        if t <= cutoff_time:
             return 0
-        cutoff = local_dt.replace(hour=8, minute=0, second=0, microsecond=0)
+        cutoff = local_dt.replace(hour=cutoff_time.hour, minute=cutoff_time.minute, second=0, microsecond=0)
         return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
 
     if action == 'check_out':
-        if t >= CHECK_OUT_ON_TIME_START:
-            return 0
-        cutoff = local_dt.replace(hour=13, minute=30, second=0, microsecond=0)
-        return max(int((cutoff - local_dt.replace(second=0, microsecond=0)).total_seconds() // 60), 0)
+        if checkout_excuse_cutoff:
+            if t <= checkout_excuse_cutoff:
+                return 0
+            cutoff = local_dt.replace(hour=checkout_excuse_cutoff.hour, minute=checkout_excuse_cutoff.minute, second=0, microsecond=0)
+            return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
+
+        if t < CHECK_OUT_ON_TIME_START:
+            cutoff = local_dt.replace(hour=13, minute=30, second=0, microsecond=0)
+            return max(int((cutoff - local_dt.replace(second=0, microsecond=0)).total_seconds() // 60), 0)
+        if t > CHECK_OUT_ON_TIME_END:
+            cutoff = local_dt.replace(hour=14, minute=30, second=0, microsecond=0)
+            return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
+        return 0
 
     return 0
+
+
+def calculate_late_minutes_for_employee(employee, action, local_dt):
+    """
+    نفس calculate_late_minutes بس تربط باقي الصفحات مع بعض:
+    - يوم فيه طبية أو إجازة مقبولة → صفر تأخير مباشرة (معفى بالكامل).
+    - حضور بيوم فيه استئذان → القطع يمتد لوقت نهاية الاستئذان بدل 8:00 الثابتة.
+    - انصراف بيوم فيه استئذان نهاية دوام → وقت الاستئذان نفسه يصير الموعد
+      المتوقع بالضبط للانصراف (تأخير فوري بعده، بدون فترة سماح).
+    """
+    local_date = local_dt.date()
+
+    if _is_exempt_day(employee, local_date):
+        return 0
+
+    checkin_cutoff = _checkin_effective_cutoff(employee, local_date) if action == 'check_in' else None
+    checkout_excuse_cutoff = _checkout_excuse_cutoff(employee, local_date) if action == 'check_out' else None
+    return calculate_late_minutes(action, local_dt, checkin_cutoff=checkin_cutoff, checkout_excuse_cutoff=checkout_excuse_cutoff)
 
 
 def minutes_to_hm_label(total_minutes):
@@ -367,23 +505,112 @@ def attendance_record_list(request):
         except Employee.DoesNotExist:
             return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
 
-        # الانصراف يفتح بداية من الساعة 1:30 ويضل مفتوح بعدها (بدون وقت إغلاق) —
-        # قبل 1:30 ممنوع تماماً حتى لو الموظف مسجّل حضور.
+        last_record = AttendanceRecord.objects.filter(employee=employee).order_by('-timestamp').first()
+        has_open_checkin = bool(last_record and last_record.action == 'check_in')
+
+        # ما يفتح تسجيل حضور جديد إلا لو آخر عملية كانت انصراف (أو ما فيه سجلات
+        # أصلاً) — لازم تسجّل انصراف أول قبل ما يفتح الحضور من جديد، بغض النظر
+        # عن اليوم (حتى لو دخل يوم جديد وأنت لسا ما سجّلت انصراف).
+        if action == 'check_in' and has_open_checkin:
+            return Response(
+                {"error": "عندك بصمة حضور مفتوحة — لازم تسجّل انصراف أول قبل ما تقدر تسجّل حضور جديد"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # لو آخر عملية انصراف، وهذا الانصراف صار اليوم، والحضور اللي فتحه صار
+        # اليوم كمان (يعني دورة حضور/انصراف كاملة بنفس اليوم) — ما يفتح حضور
+        # جديد إلا مع بداية يوم جديد. (لو الحضور كان من يوم سابق وتجاوز منتصف
+        # الليل، ما ينطبق هذا القيد ويفتح الحضور فوراً — نفس منطق الفرونت إند.)
+        if action == 'check_in' and last_record and last_record.action == 'check_out':
+            today_local_date = to_local_time(dj_timezone.now()).date()
+            checkout_local_date = to_local_time(last_record.timestamp).date()
+            if checkout_local_date == today_local_date:
+                second_last = AttendanceRecord.objects.filter(employee=employee).exclude(
+                    id=last_record.id
+                ).order_by('-timestamp').first()
+                if (
+                    second_last and second_last.action == 'check_in'
+                    and to_local_time(second_last.timestamp).date() == today_local_date
+                ):
+                    return Response(
+                        {"error": "سجّلت حضور وانصراف كاملين اليوم — ما يصير حضور جديد إلا مع بداية يوم جديد"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+
+        # ما يفتح تسجيل انصراف إلا لو فيه بصمة حضور مفتوحة أصلاً
+        if action == 'check_out' and not has_open_checkin:
+            return Response(
+                {"error": "ما فيه بصمة حضور مفتوحة تقدر تسجّل عليها انصراف"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        open_checkin_local_date = None
+        crosses_into_new_day = False
+        checkout_excuse_cutoff_used = None
         if action == 'check_out':
+            open_checkin_local_date = to_local_time(last_record.timestamp).date()
             now_local = to_local_time(dj_timezone.now())
-            if now_local.time() < CHECK_OUT_ON_TIME_START:
-                return Response(
-                    {"error": "لا يمكن تسجيل الانصراف قبل الساعة 1:30"},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+            crosses_into_new_day = now_local.date() != open_checkin_local_date
+
+            # الانصراف بنفس يوم الحضور يفتح بداية من 1:30 عادةً. لو فيه استئذان
+            # نهاية دوام بنفس اليوم، ما فيه قيد وقت أدنى إطلاقاً — مسموح ينصرف
+            # أي وقت، والتأخير يُحسب تلقائياً لو تجاوز وقت الاستئذان (بالأسفل).
+            # لو الانصراف صار بيوم تالي (نسى يسجّل انصراف بوقته) يُسمح بأي وقت
+            # كمان لأنه أصلاً متأخر جداً (تُحسب الفترة كتأخير كامل بالأسفل).
+            if not crosses_into_new_day:
+                checkout_excuse_cutoff_used = _checkout_excuse_cutoff(employee, open_checkin_local_date)
+                if checkout_excuse_cutoff_used is None and now_local.time() < CHECK_OUT_ON_TIME_START:
+                    return Response(
+                        {"error": "لا يمكن تسجيل الانصراف قبل الساعة 1:30"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
         record = AttendanceRecord.objects.create(employee=employee, action=action)
         local_dt = to_local_time(record.timestamp)
-        record.late_minutes = calculate_late_minutes(action, local_dt)
+
+        # الإعفاء (طبية/إجازة) يُحسب دايماً على يوم الحضور نفسه — عشان لو صار
+        # الانصراف متأخر ليوم تالي، يضل مربوط بنفس يوم الحضور الأصلي لغرض الإعفاء.
+        exemption_date = open_checkin_local_date if action == 'check_out' else local_dt.date()
+        exemption = _exemption_reason(employee, exemption_date)
+
+        checkin_cutoff_used = None
+        if exemption:
+            record.late_minutes = 0
+        elif action == 'check_out' and crosses_into_new_day:
+            # نسى يسجّل انصراف بوقته وتجاوزنا لليوم التالي — كل الفترة اللي مرّت
+            # من لحظة الحضور لين لحظة الانصراف تُحسب تأخير كامل.
+            elapsed_minutes = int((record.timestamp - last_record.timestamp).total_seconds() // 60)
+            record.late_minutes = max(elapsed_minutes, 0)
+        elif action == 'check_in':
+            # نجيب وقت القطع الفعلي بشكل صريح (مو مخفي جوا الدالة) عشان نقدر
+            # نسجّله بسجل الأنشطة لو امتد بسبب استئذان — يفيد بتتبّع أي صفر
+            # تأخير غير متوقع بالمستقبل.
+            checkin_cutoff_used = _checkin_effective_cutoff(employee, local_dt.date())
+            record.late_minutes = calculate_late_minutes(action, local_dt, checkin_cutoff=checkin_cutoff_used)
+        elif action == 'check_out':
+            # checkout_excuse_cutoff_used محسوبة أعلى وقت التحقق — نفس القيمة
+            # تُستخدم بالحساب عشان تطابق استئذان نهاية الدوام (لو موجود).
+            record.late_minutes = calculate_late_minutes(action, local_dt, checkout_excuse_cutoff=checkout_excuse_cutoff_used)
+        else:
+            record.late_minutes = calculate_late_minutes_for_employee(employee, action, local_dt)
+
         if record.late_minutes:
             record.save(update_fields=['late_minutes'])
 
-        late_note = f" — متأخر {record.late_minutes} دقيقة ({minutes_to_hm_label(record.late_minutes)})" if record.late_minutes else ""
+        if exemption:
+            reason_label = 'طبية مسجّلة' if exemption == 'sick_leave' else 'إجازة مقبولة'
+            late_note = f" — معفى من احتساب التأخير (يوجد {reason_label} بنفس التاريخ)"
+        elif checkin_cutoff_used and checkin_cutoff_used != CHECK_IN_ON_TIME_END:
+            note_tail = f"متأخر {record.late_minutes} دقيقة" if record.late_minutes else "بدون تأخير"
+            late_note = f" — وقت القطع امتد لـ {checkin_cutoff_used.strftime('%H:%M')} بسبب استئذان مسجّل بنفس اليوم ({note_tail})"
+        elif checkout_excuse_cutoff_used:
+            note_tail = f"متأخر {record.late_minutes} دقيقة" if record.late_minutes else "بدون تأخير"
+            late_note = f" — موعد الانصراف المتوقع {checkout_excuse_cutoff_used.strftime('%H:%M')} بسبب استئذان نهاية دوام مسجّل بنفس اليوم ({note_tail})"
+        elif record.late_minutes:
+            late_note = f" — متأخر {record.late_minutes} دقيقة ({minutes_to_hm_label(record.late_minutes)})"
+        else:
+            late_note = ""
+
         ActivityLog.objects.create(
             action='create',
             description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}{late_note}",
@@ -438,11 +665,13 @@ def attendance_stats(request):
         total_late_minutes += rec_late or 0
         local_date = local_dt.date()
         days_actions.setdefault(local_date, set()).add(rec_action)
-        if rec_action == 'check_out' and local_dt.time() >= CHECK_OUT_ON_TIME_START:
+        # الانصراف "بالوقت" = بدون أي دقايق تأخير محسوبة عليه أصلاً (سواء كان
+        # بالقاعدة العادية 1:30-2:30، أو بموعد استئذان نهاية دوام لو موجود) —
+        # نستخدم late_minutes المخزّنة على السجل نفسه بدل إعادة الحساب.
+        if rec_action == 'check_out' and not rec_late:
             checkout_ontime_days.add(local_date)
 
-    # يوم عمل = يوم فيه حضور وانصراف بنفس اليوم الميلادي، وانصراف مسجّل بفترة
-    # نهاية الدوام الرسمية (1:30 فأعلى — الانصراف ما يصير يتسجل أصلاً قبلها)
+    # يوم عمل = يوم فيه حضور وانصراف بنفس اليوم الميلادي، وانصراف بدون تأخير
     workdays_count = sum(
         1 for d, actions in days_actions.items()
         if {'check_in', 'check_out'}.issubset(actions) and d in checkout_ontime_days
@@ -515,15 +744,40 @@ def excuse_list(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # ── الحد الشهري ──
-        month_count = Excuse.objects.filter(
+        # ── مدة الاستئذان الواحد: أقصى حد 3 ساعات ──
+        requested_minutes = _excuse_duration_minutes(time_from, time_to)
+        if requested_minutes is None:
+            return Response(
+                {"error": "تعذّر فهم وقت البداية/النهاية — تأكد إن وقت النهاية بعد وقت البداية"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if requested_minutes > MAX_EXCUSE_HOURS_PER_DAY * 60:
+            return Response(
+                {"error": f"أقصى مدة مسموحة للاستئذان الواحد {MAX_EXCUSE_HOURS_PER_DAY} ساعات"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── الحد الشهري (عدد الاستئذانات) ──
+        month_excuses = Excuse.objects.filter(
             employee=employee,
             recorded_at__year=today.year,
             recorded_at__month=today.month,
-        ).count()
+        )
+        month_count = month_excuses.count()
         if month_count >= MONTHLY_EXCUSE_LIMIT:
             return Response(
                 {"error": f"تم استخدام كل الاستئذانات المسموحة هذا الشهر ({MONTHLY_EXCUSE_LIMIT})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # ── الحد الشهري (إجمالي الساعات) — دفاعياً بالإضافة لحد العدد+حد المدة ──
+        existing_minutes = sum(
+            _excuse_duration_minutes(exc.time_from, exc.time_to) or 0 for exc in month_excuses
+        )
+        if existing_minutes + requested_minutes > MONTHLY_EXCUSE_HOURS_LIMIT:
+            remaining = max(MONTHLY_EXCUSE_HOURS_LIMIT - existing_minutes, 0)
+            return Response(
+                {"error": f"تجاوزت الحد الأقصى لساعات الاستئذان الشهرية ({MONTHLY_EXCUSE_HOURS_LIMIT // 60} ساعة) — المتبقي لك {minutes_to_hm_label(remaining)}"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

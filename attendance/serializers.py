@@ -49,11 +49,25 @@ class AttendanceRecordSerializer(serializers.ModelSerializer):
 
 
 class ExcuseSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_name    = serializers.CharField(source='employee.name', read_only=True)
+    duration_minutes = serializers.SerializerMethodField()
+    duration_display = serializers.SerializerMethodField()
+
+    def get_duration_minutes(self, obj):
+        from .views import _excuse_duration_minutes
+        return _excuse_duration_minutes(obj.time_from, obj.time_to)
+
+    def get_duration_display(self, obj):
+        from .views import _excuse_duration_minutes, minutes_to_hm_label
+        minutes = _excuse_duration_minutes(obj.time_from, obj.time_to)
+        return minutes_to_hm_label(minutes) if minutes else None
 
     class Meta:
         model = Excuse
-        fields = ['id', 'employee', 'employee_name', 'date', 'time_from', 'time_to', 'period', 'recorded_at']
+        fields = [
+            'id', 'employee', 'employee_name', 'date', 'time_from', 'time_to', 'period', 'recorded_at',
+            'duration_minutes', 'duration_display',
+        ]
 
 
 class VacationSerializer(serializers.ModelSerializer):

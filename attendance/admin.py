@@ -1,6 +1,6 @@
 from django.contrib import admin
 from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
-from .views import calculate_late_minutes, to_local_time
+from .views import calculate_late_minutes_for_employee, to_local_time
 
 
 @admin.register(Employee)
@@ -45,7 +45,7 @@ class AttendanceRecordAdmin(admin.ModelAdmin):
         # نعيد احتساب دقايق التأخير تلقائياً كل مرة يتغيّر فيها وقت الحضور/الانصراف
         # يدوياً من الأدمن، عشان الإحصائيات تضل صحيحة ومتوافقة مع الوقت الجديد.
         local_dt = to_local_time(obj.timestamp)
-        obj.late_minutes = calculate_late_minutes(obj.action, local_dt)
+        obj.late_minutes = calculate_late_minutes_for_employee(obj.employee, obj.action, local_dt)
         super().save_model(request, obj, form, change)
 
 
