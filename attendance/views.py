@@ -1,4 +1,4 @@
-from datetime import date, datetime, time as dt_time
+from datetime import date, datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 from django.db.models import Q
 from django.utils import timezone as dj_timezone
@@ -25,7 +25,7 @@ PERIODIC_VACATION_YEARLY_LIMIT  = 35
 EMERGENCY_VACATION_YEARLY_LIMIT = 4
 
 # ══ نظام دقايق التأخير وأيام الدوام ══
-# فترة الحضور المسموحة: 7:30 - 8:00 (بدون تأخير) — من 8:01 يبدأ احتساب التأخير
+# فترة الحضور المسموحة: من 7:00 وطالع (بدون أي وقت أدنى فعلي) - 8:00 (بدون تأخير) — من 8:01 يبدأ احتساب التأخير
 CHECK_IN_ON_TIME_END    = dt_time(8, 0)
 # فترة الانصراف المسموحة بدون تأخير: 1:30 - 2:30 — قبل 1:30 ممنوع تماماً تسجيله،
 # وبعد 2:30 بنفس اليوم يُحسب تأخير (الفرق بين 2:30 ووقت الانصراف الفعلي).
@@ -794,6 +794,26 @@ def excuse_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+def _effective_periodic_vacation_days(vacation):
+    """
+    عدد أيام الإجازة الدورية الفعلي المحسوب على رصيد السنة:
+    - طول ما الإجازة شغالة أو مستقبلية (اليوم <= تاريخ نهايتها): كل الأيام
+      تُحسب بما فيها الجمعة (خصم كامل مؤقت من الرصيد).
+    - بعد ما تنتهي الإجازة فعلياً (اليوم > تاريخ نهايتها): كل يوم جمعة وقع
+      بمدى الإجازة يرجع للرصيد تلقائياً (ما يُحسب ضمن الأيام المستهلكة).
+    ملاحظة: هذا يأثر بس على حساب الرصيد المتبقي — المدة المعروضة لكل إجازة
+    لحالها بالجداول تضل زي ما هي (كل الأيام المحجوزة الفعلية، بدون تعديل).
+    """
+    total_days = (vacation.date_to - vacation.date_from).days + 1
+    if date.today() <= vacation.date_to:
+        return total_days
+    fridays = sum(
+        1 for i in range(total_days)
+        if (vacation.date_from + timedelta(days=i)).weekday() == 4  # الجمعة = 4 (الاثنين=0 بمكتبة datetime)
+    )
+    return total_days - fridays
+
+
 # GET (كل إجازات موظف معين) — POST (تسجيل إجازة جديدة: دورية أو طارئة)
 @api_view(['GET', 'POST'])
 def vacation_list(request):
@@ -853,7 +873,7 @@ def vacation_list(request):
             existing = Vacation.objects.filter(
                 employee=employee, vacation_type='periodic', date_from__year=year,
             ).exclude(status='rejected')
-            used_days = sum((v.date_to - v.date_from).days + 1 for v in existing)
+            used_days = sum(_effective_periodic_vacation_days(v) for v in existing)
             new_days = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days + 1
 
             if used_days + new_days > PERIODIC_VACATION_YEARLY_LIMIT:
