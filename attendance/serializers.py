@@ -1,11 +1,17 @@
 from rest_framework import serializers
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Employee
-        fields = ['id', 'name']
+        fields = ['id', 'name', 'civil_id', 'phone_number']
+
+
+class SupervisorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Supervisor
+        fields = ['id', 'name', 'civil_id', 'phone_number']
 
 
 class SickLeaveSerializer(serializers.ModelSerializer):
@@ -18,24 +24,71 @@ class SickLeaveSerializer(serializers.ModelSerializer):
 
 class ActivityLogSerializer(serializers.ModelSerializer):
     action_display = serializers.CharField(source='get_action_display', read_only=True)
+    source_display = serializers.CharField(source='get_source_display', read_only=True)
 
     class Meta:
         model = ActivityLog
-        fields = ['id', 'action', 'action_display', 'description', 'created_at']
+        fields = ['id', 'action', 'action_display', 'description', 'source', 'source_display', 'ip_address', 'created_at']
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):
-    employee_name  = serializers.CharField(source='employee.name', read_only=True)
-    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    employee_name       = serializers.CharField(source='employee.name', read_only=True)
+    action_display      = serializers.CharField(source='get_action_display', read_only=True)
+    late_minutes_display = serializers.SerializerMethodField()
+
+    def get_late_minutes_display(self, obj):
+        from .views import minutes_to_hm_label
+        return minutes_to_hm_label(obj.late_minutes) if obj.late_minutes else None
 
     class Meta:
         model = AttendanceRecord
-        fields = ['id', 'employee', 'employee_name', 'action', 'action_display', 'timestamp']
+        fields = [
+            'id', 'employee', 'employee_name', 'action', 'action_display', 'timestamp',
+            'late_minutes', 'late_minutes_display',
+        ]
 
 
 class ExcuseSerializer(serializers.ModelSerializer):
-    employee_name = serializers.CharField(source='employee.name', read_only=True)
+    employee_name    = serializers.CharField(source='employee.name', read_only=True)
+    duration_minutes = serializers.SerializerMethodField()
+    duration_display = serializers.SerializerMethodField()
+
+    def get_duration_minutes(self, obj):
+        from .views import _excuse_duration_minutes
+        return _excuse_duration_minutes(obj.time_from, obj.time_to)
+
+    def get_duration_display(self, obj):
+        from .views import _excuse_duration_minutes, minutes_to_hm_label
+        minutes = _excuse_duration_minutes(obj.time_from, obj.time_to)
+        return minutes_to_hm_label(minutes) if minutes else None
 
     class Meta:
         model = Excuse
-        fields = ['id', 'employee', 'employee_name', 'date', 'time_from', 'time_to', 'period', 'recorded_at']
+        fields = [
+            'id', 'employee', 'employee_name', 'date', 'time_from', 'time_to', 'period', 'recorded_at',
+            'duration_minutes', 'duration_display',
+        ]
+
+
+class VacationSerializer(serializers.ModelSerializer):
+    employee_name         = serializers.CharField(source='employee.name', read_only=True)
+    employee_civil_id     = serializers.CharField(source='employee.civil_id', read_only=True)
+    vacation_type_display = serializers.CharField(source='get_vacation_type_display', read_only=True)
+    status_display        = serializers.CharField(source='get_status_display', read_only=True)
+    reviewed_by_name       = serializers.SerializerMethodField()
+    reviewed_by_civil_id   = serializers.SerializerMethodField()
+
+    def get_reviewed_by_name(self, obj):
+        return obj.reviewed_by.name if obj.reviewed_by else None
+
+    def get_reviewed_by_civil_id(self, obj):
+        return obj.reviewed_by.civil_id if obj.reviewed_by else None
+
+    class Meta:
+        model = Vacation
+        fields = [
+            'id', 'employee', 'employee_name', 'employee_civil_id', 'vacation_type', 'vacation_type_display',
+            'date_from', 'date_to', 'status', 'status_display',
+            'reviewed_by', 'reviewed_by_name', 'reviewed_by_civil_id',
+            'recorded_at',
+        ]

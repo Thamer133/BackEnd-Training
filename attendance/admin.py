@@ -1,11 +1,18 @@
 from django.contrib import admin
-from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse
+from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
+from .views import calculate_late_minutes_for_employee, to_local_time
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['name']
-    search_fields = ['name']
+    list_display = ['name', 'civil_id', 'phone_number']
+    search_fields = ['name', 'civil_id', 'phone_number']
+
+
+@admin.register(Supervisor)
+class SupervisorAdmin(admin.ModelAdmin):
+    list_display = ['name', 'civil_id', 'phone_number']
+    search_fields = ['name', 'civil_id', 'phone_number']
 
 
 @admin.register(SickLeave)
@@ -17,20 +24,40 @@ class SickLeaveAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['action', 'description', 'created_at']
-    list_filter = ['action']
-    search_fields = ['description']
+    list_display = ['action', 'description', 'table', 'ip_address', 'created_at']
+    list_filter = ['action', 'source']
+    search_fields = ['description', 'ip_address']
+
+    def table(self, obj):
+        return obj.get_source_display()
+    table.short_description = "table"
 
 
 @admin.register(AttendanceRecord)
 class AttendanceRecordAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'action', 'timestamp']
+    list_display = ['employee', 'action', 'timestamp', 'late_minutes']
     list_filter = ['employee', 'action']
     search_fields = ['employee__name']
+    # timestamp صار حقل عادي قابل للتعديل (مو auto_now_add) — يعني يظهر بفورم
+    # الإضافة/التعديل بلوحة الأدمن وتقدر تختار الوقت يدوياً من هني بس.
+
+    def save_model(self, request, obj, form, change):
+        # نعيد احتساب دقايق التأخير تلقائياً كل مرة يتغيّر فيها وقت الحضور/الانصراف
+        # يدوياً من الأدمن، عشان الإحصائيات تضل صحيحة ومتوافقة مع الوقت الجديد.
+        local_dt = to_local_time(obj.timestamp)
+        obj.late_minutes = calculate_late_minutes_for_employee(obj.employee, obj.action, local_dt)
+        super().save_model(request, obj, form, change)
 
 
 @admin.register(Excuse)
 class ExcuseAdmin(admin.ModelAdmin):
     list_display = ['employee', 'date', 'time_from', 'time_to', 'period', 'recorded_at']
     list_filter = ['employee', 'period']
+    search_fields = ['employee__name']
+
+
+@admin.register(Vacation)
+class VacationAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'vacation_type', 'date_from', 'date_to', 'status', 'reviewed_by', 'recorded_at']
+    list_filter = ['employee', 'vacation_type', 'status']
     search_fields = ['employee__name']

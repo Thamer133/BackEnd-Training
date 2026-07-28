@@ -79,10 +79,19 @@ WSGI_APPLICATION = 'core.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'mssql',
+        'NAME': 'cid_training',
+        'HOST': 'DESKTOP-VDJRKNR',
+        'PORT': '',
+        'OPTIONS': {
+            'driver': 'ODBC Driver 17 for SQL Server',
+            'trusted_connection': 'yes',
+        },
     }
 }
+
+# تعطيل connection pooling الخاص بـ pyodbc (موصى فيه مع Django)
+DATABASE_CONNECTION_POOLING = False
 
 
 # Password validation

@@ -1,0 +1,1489 @@
+[
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$kZjhZgniUO0ekCzSx7YTQF$53tYIkKNKdvPvEZp5ZvhFh/s4REfs+TU5vpz9ROXnno=",
+    "last_login": "2026-07-07T08:48:29.772Z",
+    "is_superuser": true,
+    "username": "admin",
+    "first_name": "",
+    "last_name": "",
+    "email": "thamermmm@gmail.com",
+    "is_staff": true,
+    "is_active": true,
+    "date_joined": "2026-07-01T06:05:51.499Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "auth.user",
+  "fields": {
+    "password": "pbkdf2_sha256$1200000$5WeVB8wY69GRkyr5nHoOmg$b4tt/oeQ4eoFLCJ2vPTQeRERxqIfsCIpPugtFv+TlFw=",
+    "last_login": null,
+    "is_superuser": true,
+    "username": "admin2",
+    "first_name": "",
+    "last_name": "",
+    "email": "",
+    "is_staff": false,
+    "is_active": true,
+    "date_joined": "2026-07-07T08:47:11Z",
+    "groups": [],
+    "user_permissions": []
+  }
+},
+{
+  "model": "training.person",
+  "pk": 1,
+  "fields": {
+    "name": "محمد علي العنزي",
+    "civil_id": "289031574628",
+    "nationality": "كويتي"
+  }
+},
+{
+  "model": "training.person",
+  "pk": 2,
+  "fields": {
+    "name": "خالد سعد المطيري",
+    "civil_id": "198473625041",
+    "nationality": "كويتي"
+  }
+},
+{
+  "model": "training.person",
+  "pk": 3,
+  "fields": {
+    "name": "فاطمة أحمد العنزي",
+    "civil_id": "301874562910",
+    "nationality": "كويتية"
+  }
+},
+{
+  "model": "training.person",
+  "pk": 4,
+  "fields": {
+    "name": "نورة سالم العجمي",
+    "civil_id": "412563897012",
+    "nationality": "كويتية"
+  }
+},
+{
+  "model": "training.person",
+  "pk": 5,
+  "fields": {
+    "name": "يعقوب القلاف",
+    "civil_id": "297093000244",
+    "nationality": "الكويت"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 1,
+  "fields": {
+    "civil_id": null,
+    "unified_number": "112233445",
+    "name": "Ahmed Al-Sayed",
+    "age": 28,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 2,
+  "fields": {
+    "civil_id": null,
+    "unified_number": "223344550",
+    "name": "Maria Santos",
+    "age": 34,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 3,
+  "fields": {
+    "civil_id": null,
+    "unified_number": "334455669",
+    "name": "John Mathew",
+    "age": 41,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 4,
+  "fields": {
+    "civil_id": null,
+    "unified_number": "445566778",
+    "name": "Priya Nair",
+    "age": 25,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 5,
+  "fields": {
+    "civil_id": "111111111111",
+    "unified_number": "657678767",
+    "name": "Mohammed Al-Kuwaiti",
+    "age": 35,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 6,
+  "fields": {
+    "civil_id": "222222222222",
+    "unified_number": "372923841",
+    "name": "Fatima Al-Kuwaiti",
+    "age": 28,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 7,
+  "fields": {
+    "civil_id": "333333333333",
+    "unified_number": "556677883",
+    "name": "John Smith",
+    "age": 40,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 8,
+  "fields": {
+    "civil_id": "444444444444",
+    "unified_number": null,
+    "name": "Maria Lopez",
+    "age": 32,
+    "nationality": "فلبينية",
+    "gender": "F"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 9,
+  "fields": {
+    "civil_id": "555555555555",
+    "unified_number": null,
+    "name": "Raj Patel",
+    "age": 27,
+    "nationality": null,
+    "gender": null
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 10,
+  "fields": {
+    "civil_id": "989898989898",
+    "unified_number": "123456784",
+    "name": "سالم فهد",
+    "age": 30,
+    "nationality": "سوري",
+    "gender": "M"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 11,
+  "fields": {
+    "civil_id": "987654321098",
+    "unified_number": null,
+    "name": "Maria Santos",
+    "age": 28,
+    "nationality": "فلبينية",
+    "gender": "F"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 12,
+  "fields": {
+    "civil_id": "297093000244",
+    "unified_number": "676767854",
+    "name": "yaq alqallaf",
+    "age": 27,
+    "nationality": "الكويت",
+    "gender": "M"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 13,
+  "fields": {
+    "civil_id": "303011701126",
+    "unified_number": "222222222",
+    "name": "Abdulmohsen salem",
+    "age": 23,
+    "nationality": "السعودية",
+    "gender": "M"
+  }
+},
+{
+  "model": "training.civilrecord",
+  "pk": 14,
+  "fields": {
+    "civil_id": "305030600653",
+    "unified_number": null,
+    "name": "Hussain Khaled",
+    "age": 21,
+    "nationality": "استراليا",
+    "gender": "M"
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 1,
+  "fields": {
+    "name": "ثامر فريد",
+    "civil_id": "303011201404"
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 2,
+  "fields": {
+    "name": "يعقوب القلاف",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 3,
+  "fields": {
+    "name": "براك السميط",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 4,
+  "fields": {
+    "name": "فيصل",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 5,
+  "fields": {
+    "name": "محمد المهندي",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 6,
+  "fields": {
+    "name": "عثمان علي",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 7,
+  "fields": {
+    "name": "احمد",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.employee",
+  "pk": 8,
+  "fields": {
+    "name": "علي جاسم",
+    "civil_id": null
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 1,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-07",
+    "recorded_at": "2026-07-07T10:06:16.049Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 2,
+  "fields": {
+    "employee": 3,
+    "date": "2026-07-07",
+    "recorded_at": "2026-07-07T10:07:08.043Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 3,
+  "fields": {
+    "employee": 3,
+    "date": "2026-07-06",
+    "recorded_at": "2026-07-07T10:07:18.446Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 4,
+  "fields": {
+    "employee": 3,
+    "date": "2026-07-05",
+    "recorded_at": "2026-07-07T10:07:20.448Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 5,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-08",
+    "recorded_at": "2026-07-08T07:17:45.904Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 6,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-06",
+    "recorded_at": "2026-07-09T06:20:33.037Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 9,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-09",
+    "recorded_at": "2026-07-12T06:37:06.722Z"
+  }
+},
+{
+  "model": "attendance.sickleave",
+  "pk": 10,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-01",
+    "recorded_at": "2026-07-12T06:54:43.707Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 1,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ ٧ يوليو ٢٠٢٦ الساعة ٠٣:٠٤:٥٦ ص",
+    "created_at": "2026-07-07T10:04:56.853Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 2,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ ٧ يوليو ٢٠٢٦ الساعة ٠٣:٠٤:٥٨ ص",
+    "created_at": "2026-07-07T10:04:58.496Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 3,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ ٧ يوليو ٢٠٢٦ الساعة ٠٣:٠٥:١٠ ص",
+    "created_at": "2026-07-07T10:05:10.227Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 4,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ ٧ يوليو ٢٠٢٦ الساعة ٠٣:٠٥:١٢ ص",
+    "created_at": "2026-07-07T10:05:12.038Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 5,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-07",
+    "created_at": "2026-07-07T10:06:16.148Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 6,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ براك السميط بتاريخ 2026-07-07",
+    "created_at": "2026-07-07T10:07:08.168Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 7,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ براك السميط بتاريخ 2026-07-06",
+    "created_at": "2026-07-07T10:07:18.530Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 8,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ براك السميط بتاريخ 2026-07-05",
+    "created_at": "2026-07-07T10:07:20.565Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 9,
+  "fields": {
+    "action": "create",
+    "description": "براك السميط سجّل حضور بتاريخ ٧ يوليو ٢٠٢٦ الساعة ١١:١٨:١٩ م",
+    "created_at": "2026-07-08T06:18:19.719Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 10,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ ٧ يوليو ٢٠٢٦ الساعة ١١:٢٩:٣٧ م",
+    "created_at": "2026-07-08T06:29:37.078Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 11,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ ٧ يوليو ٢٠٢٦ الساعة ١١:٢٩:٣٨ م",
+    "created_at": "2026-07-08T06:29:38.120Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 12,
+  "fields": {
+    "action": "create",
+    "description": "محمد المهندي سجّل حضور بتاريخ ٧ يوليو ٢٠٢٦ الساعة ١١:٢٩:٤٠ م",
+    "created_at": "2026-07-08T06:29:40.847Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 13,
+  "fields": {
+    "action": "create",
+    "description": "محمد المهندي سجّل انصراف بتاريخ ٧ يوليو ٢٠٢٦ الساعة ١١:٢٩:٤١ م",
+    "created_at": "2026-07-08T06:29:41.359Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 14,
+  "fields": {
+    "action": "create",
+    "description": "احمد سجّل حضور بتاريخ ٨ يوليو ٢٠٢٦ الساعة ١٢:٠٧:١١ ص",
+    "created_at": "2026-07-08T07:07:11.933Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 15,
+  "fields": {
+    "action": "create",
+    "description": "احمد سجّل انصراف بتاريخ ٨ يوليو ٢٠٢٦ الساعة ١٢:٠٨:٠٣ ص",
+    "created_at": "2026-07-08T07:08:03.229Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 16,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل استئذان من 03:02 صباحا إلى 05:02 مساء بتاريخ ٨ يوليو ٢٠٢٦ الساعة ١٢:١٢:١٧ ص",
+    "created_at": "2026-07-08T07:12:17.781Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 17,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-08",
+    "created_at": "2026-07-08T07:17:46.027Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 18,
+  "fields": {
+    "action": "create",
+    "description": "احمد سجّل حضور بتاريخ ٨ يوليو ٢٠٢٦ الساعة ١٢:٢٣:٥٩ ص",
+    "created_at": "2026-07-08T07:23:59.891Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 19,
+  "fields": {
+    "action": "create",
+    "description": "احمد سجّل انصراف بتاريخ ٨ يوليو ٢٠٢٦ الساعة ١٢:٢٤:٠٢ ص",
+    "created_at": "2026-07-08T07:24:02.061Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 20,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-08 08:56:29.273913+00:00",
+    "created_at": "2026-07-08T08:56:29.374Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 21,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ 2026-07-08 08:56:31.320004+00:00",
+    "created_at": "2026-07-08T08:56:31.408Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 22,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل استئذان بتاريخ 2026-07-09 من 01:00 صباحا إلى 02:00 صباحا (بداية الدوام)",
+    "created_at": "2026-07-09T05:33:39.111Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 23,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-06",
+    "created_at": "2026-07-09T06:20:33.141Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 24,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-05",
+    "created_at": "2026-07-09T06:22:29.138Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 25,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-03",
+    "created_at": "2026-07-09T06:27:59.063Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 26,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-09 06:44:08.975091+00:00",
+    "created_at": "2026-07-09T06:44:09.072Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 27,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ 2026-07-09 06:44:14.489572+00:00",
+    "created_at": "2026-07-09T06:44:14.569Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 28,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-09 07:39:45.968779+00:00",
+    "created_at": "2026-07-09T07:39:46.065Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 29,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ 2026-07-09 07:39:49.417420+00:00",
+    "created_at": "2026-07-09T07:39:49.517Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 30,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-12 04:35:56.908005+00:00",
+    "created_at": "2026-07-12T04:35:56.993Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 31,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل استئذان بتاريخ 2026-07-11 من 09:00 صباحا إلى 10:00 صباحا (أثناء الدوام)",
+    "created_at": "2026-07-12T04:44:10.448Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 32,
+  "fields": {
+    "action": "delete",
+    "description": "حذف طبية لـ ثامر فريد بتاريخ 2026-07-03",
+    "created_at": "2026-07-12T05:25:47.213Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 33,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل استئذان بتاريخ 2026-07-13 من 04:01 صباحا إلى 05:04 مساء (نهاية الدوام)",
+    "created_at": "2026-07-12T06:35:31.408Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 34,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-09",
+    "created_at": "2026-07-12T06:37:06.895Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 35,
+  "fields": {
+    "action": "delete",
+    "description": "حذف طبية لـ ثامر فريد بتاريخ 2026-07-05",
+    "created_at": "2026-07-12T06:37:51.273Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 36,
+  "fields": {
+    "action": "create",
+    "description": "تسجيل طبية لـ ثامر فريد بتاريخ 2026-07-01",
+    "created_at": "2026-07-12T06:54:43.795Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 37,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-13 05:18:52.444867+00:00",
+    "created_at": "2026-07-13T05:18:52.543Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 38,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل استئذان بتاريخ 2026-07-16 من 02:00 صباحا إلى 03:00 صباحا (بداية الدوام)",
+    "created_at": "2026-07-13T08:56:05.089Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 39,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل انصراف بتاريخ 2026-07-13 08:56:10.130332+00:00",
+    "created_at": "2026-07-13T08:56:10.220Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 40,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل حضور بتاريخ 2026-07-14 06:32:53.543511+00:00",
+    "created_at": "2026-07-14T06:32:53.683Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 41,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل إجازة دورية بتاريخ 2026-07-01",
+    "created_at": "2026-07-14T07:03:12.085Z"
+  }
+},
+{
+  "model": "attendance.activitylog",
+  "pk": 42,
+  "fields": {
+    "action": "create",
+    "description": "ثامر فريد سجّل إجازة طارئة بتاريخ 2026-07-08",
+    "created_at": "2026-07-14T07:36:14.044Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 9,
+  "fields": {
+    "employee": 1,
+    "action": "check_in",
+    "timestamp": "2026-07-09T07:39:45.968Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 10,
+  "fields": {
+    "employee": 1,
+    "action": "check_out",
+    "timestamp": "2026-07-09T07:39:49.417Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 11,
+  "fields": {
+    "employee": 1,
+    "action": "check_in",
+    "timestamp": "2026-07-12T04:35:56.908Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 12,
+  "fields": {
+    "employee": 1,
+    "action": "check_in",
+    "timestamp": "2026-07-13T05:18:52.444Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 13,
+  "fields": {
+    "employee": 1,
+    "action": "check_out",
+    "timestamp": "2026-07-13T08:56:10.130Z"
+  }
+},
+{
+  "model": "attendance.attendancerecord",
+  "pk": 14,
+  "fields": {
+    "employee": 1,
+    "action": "check_in",
+    "timestamp": "2026-07-14T06:32:53.543Z"
+  }
+},
+{
+  "model": "attendance.excuse",
+  "pk": 1,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-09",
+    "time_from": "01:00 صباحا",
+    "time_to": "02:00 صباحا",
+    "period": "بداية الدوام",
+    "recorded_at": "2026-07-09T05:33:38.944Z"
+  }
+},
+{
+  "model": "attendance.excuse",
+  "pk": 3,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-13",
+    "time_from": "04:01 صباحا",
+    "time_to": "05:04 مساء",
+    "period": "نهاية الدوام",
+    "recorded_at": "2026-07-12T06:35:31.328Z"
+  }
+},
+{
+  "model": "attendance.excuse",
+  "pk": 4,
+  "fields": {
+    "employee": 1,
+    "date": "2026-07-16",
+    "time_from": "02:00 صباحا",
+    "time_to": "03:00 صباحا",
+    "period": "بداية الدوام",
+    "recorded_at": "2026-07-13T08:56:04.908Z"
+  }
+},
+{
+  "model": "attendance.vacation",
+  "pk": 1,
+  "fields": {
+    "employee": 1,
+    "vacation_type": "periodic",
+    "date_from": "2026-07-01",
+    "date_to": "2026-07-21",
+    "status": "pending",
+    "recorded_at": "2026-07-14T07:03:11.994Z"
+  }
+},
+{
+  "model": "attendance.vacation",
+  "pk": 2,
+  "fields": {
+    "employee": 1,
+    "vacation_type": "emergency",
+    "date_from": "2026-07-08",
+    "date_to": null,
+    "status": "pending",
+    "recorded_at": "2026-07-14T07:36:13.946Z"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 1,
+  "fields": {
+    "action_time": "2026-07-01T06:10:26.694Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "10",
+    "object_repr": "سالم فهد",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 2,
+  "fields": {
+    "action_time": "2026-07-01T06:15:24.819Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "11",
+    "object_repr": "Maria Santos",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 3,
+  "fields": {
+    "action_time": "2026-07-01T06:29:06.012Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "8",
+    "object_repr": "Maria Lopez",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\", \"Nationality\", \"Gender\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 4,
+  "fields": {
+    "action_time": "2026-07-01T06:29:44.130Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "10",
+    "object_repr": "سالم فهد",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 5,
+  "fields": {
+    "action_time": "2026-07-01T06:29:52.309Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "7",
+    "object_repr": "John Smith",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 6,
+  "fields": {
+    "action_time": "2026-07-01T06:29:57.442Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "6",
+    "object_repr": "Fatima Al-Kuwaiti",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 7,
+  "fields": {
+    "action_time": "2026-07-01T06:30:02.809Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "4",
+    "object_repr": "Priya Nair",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 8,
+  "fields": {
+    "action_time": "2026-07-01T06:30:07.259Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "3",
+    "object_repr": "John Mathew",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 9,
+  "fields": {
+    "action_time": "2026-07-01T06:30:12.759Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "2",
+    "object_repr": "Maria Santos",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 10,
+  "fields": {
+    "action_time": "2026-07-01T06:30:17.113Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "1",
+    "object_repr": "Ahmed Al-Sayed",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 11,
+  "fields": {
+    "action_time": "2026-07-01T06:30:57.981Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "8",
+    "object_repr": "Maria Lopez",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 12,
+  "fields": {
+    "action_time": "2026-07-01T07:36:45.234Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "11",
+    "object_repr": "Maria Santos",
+    "action_flag": 2,
+    "change_message": "[]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 13,
+  "fields": {
+    "action_time": "2026-07-01T07:36:57.126Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "6",
+    "object_repr": "Fatima Al-Kuwaiti",
+    "action_flag": 2,
+    "change_message": "[]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 14,
+  "fields": {
+    "action_time": "2026-07-01T07:39:33.424Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "11",
+    "object_repr": "Maria Santos",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Unified number\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 15,
+  "fields": {
+    "action_time": "2026-07-05T07:20:53.040Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "person"
+    ],
+    "object_id": "5",
+    "object_repr": "يعقوب القلاف",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 16,
+  "fields": {
+    "action_time": "2026-07-05T07:23:18.123Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "12",
+    "object_repr": "yaq alqallaf",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 17,
+  "fields": {
+    "action_time": "2026-07-05T08:21:41.706Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "13",
+    "object_repr": "Abdulmohsen salem",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 18,
+  "fields": {
+    "action_time": "2026-07-05T08:25:01.161Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "training",
+      "civilrecord"
+    ],
+    "object_id": "14",
+    "object_repr": "Hussain Khaled",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 19,
+  "fields": {
+    "action_time": "2026-07-07T08:47:12.228Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "auth",
+      "user"
+    ],
+    "object_id": "2",
+    "object_repr": "admin2",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 20,
+  "fields": {
+    "action_time": "2026-07-07T08:47:32.915Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "auth",
+      "user"
+    ],
+    "object_id": "2",
+    "object_repr": "admin2",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Superuser status\"]}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 21,
+  "fields": {
+    "action_time": "2026-07-08T07:52:17.417Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "1",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 07:52:17.408818+00:00",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 22,
+  "fields": {
+    "action_time": "2026-07-08T07:52:29.077Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "1",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 07:52:17.408818+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 23,
+  "fields": {
+    "action_time": "2026-07-08T08:42:15.187Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "2",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 08:42:15.186753+00:00",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 24,
+  "fields": {
+    "action_time": "2026-07-08T08:42:21.913Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "3",
+    "object_repr": "ثامر فريد - انصراف - 2026-07-08 08:42:21.906659+00:00",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 25,
+  "fields": {
+    "action_time": "2026-07-08T08:47:42.492Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "4",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 08:47:42.491082+00:00",
+    "action_flag": 1,
+    "change_message": "[{\"added\": {}}]"
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 26,
+  "fields": {
+    "action_time": "2026-07-08T08:48:38.996Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "4",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 08:47:42.491082+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 27,
+  "fields": {
+    "action_time": "2026-07-08T08:48:41.945Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "3",
+    "object_repr": "ثامر فريد - انصراف - 2026-07-08 08:42:21.906659+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 28,
+  "fields": {
+    "action_time": "2026-07-08T08:48:45.459Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "2",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 08:42:15.186753+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 29,
+  "fields": {
+    "action_time": "2026-07-09T06:29:01.860Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "5",
+    "object_repr": "ثامر فريد - حضور - 2026-07-08 08:56:29.273913+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 30,
+  "fields": {
+    "action_time": "2026-07-09T06:29:04.956Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "6",
+    "object_repr": "ثامر فريد - انصراف - 2026-07-08 08:56:31.320004+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 31,
+  "fields": {
+    "action_time": "2026-07-09T07:39:35.343Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "8",
+    "object_repr": "ثامر فريد - انصراف - 2026-07-09 06:44:14.489572+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 32,
+  "fields": {
+    "action_time": "2026-07-09T07:39:39.285Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "attendancerecord"
+    ],
+    "object_id": "7",
+    "object_repr": "ثامر فريد - حضور - 2026-07-09 06:44:08.975091+00:00",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 33,
+  "fields": {
+    "action_time": "2026-07-12T04:44:33.505Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "excuse"
+    ],
+    "object_id": "2",
+    "object_repr": "ثامر فريد - 2026-07-11 (أثناء الدوام)",
+    "action_flag": 3,
+    "change_message": ""
+  }
+},
+{
+  "model": "admin.logentry",
+  "pk": 34,
+  "fields": {
+    "action_time": "2026-07-14T07:04:31.307Z",
+    "user": [
+      "admin"
+    ],
+    "content_type": [
+      "attendance",
+      "employee"
+    ],
+    "object_id": "1",
+    "object_repr": "ثامر فريد",
+    "action_flag": 2,
+    "change_message": "[{\"changed\": {\"fields\": [\"Civil id\"]}}]"
+  }
+}
+]
