@@ -707,7 +707,6 @@ def attendance_stats(request):
     # إعداد settings.TIME_ZONE مو مضبوط بالضبط على الكويت.
     total_late_minutes = 0
     days_actions = {}
-    checkout_ontime_days = set()
     all_years = set()
 
     for rec_action, rec_timestamp, rec_late in all_records.values_list('action', 'timestamp', 'late_minutes'):
@@ -718,16 +717,13 @@ def attendance_stats(request):
         total_late_minutes += rec_late or 0
         local_date = local_dt.date()
         days_actions.setdefault(local_date, set()).add(rec_action)
-        # الانصراف "بالوقت" = بدون أي دقايق تأخير محسوبة عليه أصلاً (سواء كان
-        # بالقاعدة العادية 1:30-2:30، أو بموعد استئذان نهاية دوام لو موجود) —
-        # نستخدم late_minutes المخزّنة على السجل نفسه بدل إعادة الحساب.
-        if rec_action == 'check_out' and not rec_late:
-            checkout_ontime_days.add(local_date)
 
-    # يوم عمل = يوم فيه حضور وانصراف بنفس اليوم الميلادي، وانصراف بدون تأخير
+    # يوم عمل = يوم فيه حضور وانصراف بنفس اليوم الميلادي — بغض النظر عن وجود
+    # تأخير بأي منهم (حتى لو تأخر بالحضور أو انصرف متأخر، طالما حضر وانصرف
+    # فعلياً نفس اليوم يُحتسب يوم دوام كامل)
     workdays_count = sum(
-        1 for d, actions in days_actions.items()
-        if {'check_in', 'check_out'}.issubset(actions) and d in checkout_ontime_days
+        1 for actions in days_actions.values()
+        if {'check_in', 'check_out'}.issubset(actions)
     )
 
     available_years = sorted(all_years, reverse=True)
@@ -802,6 +798,21 @@ def excuse_list(request):
                 {"error": "تم تسجيل استئذان اليوم، ولا يمكن تسجيل استئذان آخر إلا بعد مرور يوم كامل"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # استئذان "بداية الدوام" معناه أساساً إنك ما بدأت الدوام لسا (بتتأخر أو
+        # تجي متأخر) — لو أصلاً بصمت حضور بهذا التاريخ، الاستئذان يصير متناقض
+        # مع الواقع، فنرفضه. (نهاية الدوام وأثناء الدوام ما يتأثرون — أصلاً
+        # مفروض يكون فيه حضور مسبق لهذولا النوعين.)
+        if period == 'بداية الدوام':
+            try:
+                excuse_date = date.fromisoformat(date_str)
+                if _first_checkin_date_between(employee, excuse_date, excuse_date):
+                    return Response(
+                        {"error": "بصمت حضور بهذا التاريخ بالفعل"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+            except ValueError:
+                pass
 
         # ── مدة الاستئذان الواحد: أقصى حد 3 ساعات ──
         requested_minutes = _excuse_duration_minutes(time_from, time_to)
@@ -921,6 +932,14 @@ def vacation_list(request):
             if date_to < date_from:
                 return Response({"error": "تاريخ النهاية يجب أن يكون بعد تاريخ البداية"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # ما يصير تقديم طلب إجازة دورية جديد طول ما فيه طلب سابق لسا "قيد
+            # الانتظار" — لازم يصدر قرار (قبول أو رفض) على الطلب الحالي أول
+            if Vacation.objects.filter(employee=employee, vacation_type='periodic', status='pending').exists():
+                return Response(
+                    {"error": "عندك طلب إجازة دورية قيد الانتظار"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         # ── تحقق من التعارض: هذا التاريخ (أو المدى) يتقاطع مع أي إجازة أخرى مسجلة مسبقاً ──
         # (دورية أو طارئة، غير المرفوضة) — يطبّق على النوعين معاً بما إن الموظف ما يقدر
         # يكون بإجازتين بنفس اليوم مهما كان نوعهم
@@ -951,10 +970,11 @@ def vacation_list(request):
                 )
 
         if vacation_type == 'periodic':
-            # حساب عدد الأيام المستخدمة هذي السنة من الإجازات الدورية (غير المرفوضة)
+            # حساب عدد الأيام المستخدمة هذي السنة — المقبولة بس (قيد الانتظار
+            # ما يخصم من الرصيد إلا لو صار قبول فعلي)
             existing = Vacation.objects.filter(
-                employee=employee, vacation_type='periodic', date_from__year=year,
-            ).exclude(status='rejected')
+                employee=employee, vacation_type='periodic', date_from__year=year, status='accepted',
+            )
             used_days = sum(_effective_periodic_vacation_days(v) for v in existing)
             new_days = (date.fromisoformat(date_to) - date.fromisoformat(date_from)).days + 1
 
@@ -966,9 +986,10 @@ def vacation_list(request):
                 )
         else:
             date_to = None
+            # الإجازة الطارئة تُقبل تلقائياً فور التسجيل، فـ'accepted' هنا يشمل عملياً كل الطارئة المسجّلة
             used_count = Vacation.objects.filter(
-                employee=employee, vacation_type='emergency', date_from__year=year,
-            ).exclude(status='rejected').count()
+                employee=employee, vacation_type='emergency', date_from__year=year, status='accepted',
+            ).count()
 
             if used_count >= EMERGENCY_VACATION_YEARLY_LIMIT:
                 return Response(
@@ -1083,15 +1104,11 @@ def vacation_detail(request, pk):
         serializer = VacationSerializer(vacation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    # ── PATCH: تغيير الحالة (قبول/رفض/إرجاع لقيد الانتظار) — نفس المنطق القديم ──
+    # ── PATCH: تغيير الحالة (قبول/رفض/إرجاع لقيد الانتظار) ──
     new_status = request.data.get('status')
     valid_statuses = [choice[0] for choice in Vacation.STATUS_CHOICES]
     if new_status not in valid_statuses:
-        # 🔍 تشخيص مؤقت — يوضّح بالضبط وش استقبل السيرفر (بدون الحاجة لـ DevTools)
-        return Response(
-            {"error": f"حالة غير صحيحة — البيانات المستقبلة فعلياً: {dict(request.data)}"},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
+        return Response({"error": "حالة غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
 
     reviewed_by_id = request.data.get('reviewed_by')
     supervisor = None
@@ -1103,6 +1120,22 @@ def vacation_detail(request, pk):
             supervisor = Supervisor.objects.get(id=reviewed_by_id)
         except Supervisor.DoesNotExist:
             return Response({"error": "المسؤول المحدد غير موجود"}, status=status.HTTP_404_NOT_FOUND)
+
+    # الخصم من الرصيد يصير بس عند القبول الفعلي — نتأكد وقت القبول نفسه إن
+    # الرصيد يكفي (ممكن يكون تراكم أكثر من طلب قيد الانتظار بنفس الوقت)
+    if new_status == 'accepted' and vacation.vacation_type == 'periodic' and vacation.date_to:
+        year = vacation.date_from.year
+        already_accepted = Vacation.objects.filter(
+            employee=vacation.employee, vacation_type='periodic', date_from__year=year, status='accepted',
+        ).exclude(pk=vacation.pk)
+        used_days = sum(_effective_periodic_vacation_days(v) for v in already_accepted)
+        this_request_days = (vacation.date_to - vacation.date_from).days + 1
+        if used_days + this_request_days > PERIODIC_VACATION_YEARLY_LIMIT:
+            remaining = max(0, PERIODIC_VACATION_YEARLY_LIMIT - used_days)
+            return Response(
+                {"error": f"قبول هذا الطلب يتجاوز الحد المسموح للإجازة الدورية هذه السنة (المتبقي فعلياً: {remaining} يوم من {PERIODIC_VACATION_YEARLY_LIMIT})"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     vacation.status = new_status
     if supervisor:
