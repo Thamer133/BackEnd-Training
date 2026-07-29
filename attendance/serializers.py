@@ -90,5 +90,5 @@ class VacationSerializer(serializers.ModelSerializer):
             'id', 'employee', 'employee_name', 'employee_civil_id', 'vacation_type', 'vacation_type_display',
             'date_from', 'date_to', 'status', 'status_display',
             'reviewed_by', 'reviewed_by_name', 'reviewed_by_civil_id',
-            'recorded_at',
+            'recorded_at', 'is_opened_by_admin',
         ]

@@ -32,6 +32,11 @@ CHECK_IN_ON_TIME_END    = dt_time(8, 0)
 CHECK_OUT_ON_TIME_START = dt_time(13, 30)
 CHECK_OUT_ON_TIME_END   = dt_time(14, 30)
 
+# نطاق ساعات الدوام الفعلي — أي وقت استئذان (من/إلى) لازم يقع بالكامل ضمن هذا
+# المدى (من 7:30 لين 2:30 نهاية فترة الانصراف — ما يصير استئذان قبل 7:30).
+WORK_HOURS_START = dt_time(7, 30)
+WORK_HOURS_END   = dt_time(14, 30)
+
 YEARLY_LATE_MINUTES_LIMIT  = 7 * 60  # 7 ساعات = 420 دقيقة بالسنة — بعدها إشعار "تجاوز الحد الأقصى"
 YEARLY_WORKDAYS_MIN_TARGET = 180     # 180 يوم عمل بالسنة — الحد الأدنى للدوام
 
@@ -101,23 +106,31 @@ def _checkin_effective_cutoff(employee, local_date):
     return cutoff
 
 
-def _checkout_excuse_cutoff(employee, local_date):
+def _checkout_excuse_window(employee, local_date):
     """
-    لو عند الموظف استئذان "نهاية الدوام" بنفس اليوم يبدأ قبل 1:30، وقت بداية
-    الاستئذان يصير هو "الموعد المتوقع" للانصراف — انصراف بالضبط بهذا الوقت أو
-    قبله = بدون تأخير، وأي دقيقة بعده تُحسب تأخير فوراً (بدون أي فترة سماح زي
-    القاعدة العادية 1:30-2:30). يرجع None لو ما فيه استئذان من هالنوع، فترجع
-    القاعدة العادية.
+    لو عند الموظف استئذان "نهاية الدوام" بنفس اليوم، يرجع (وقت البداية، وقت
+    النهاية) — أي انصراف يقع **داخل** هذا المدى بالكامل (بين الوقتين، بأي
+    لحظة، مو بس بدايته) = صفر تأخير، لأنه أصلاً مغطى بالاستئذان. برّا هذا
+    المدى، القاعدة العادية تطبّق زي ما هي (ممنوع قبل 1:30، تأخير بعد 2:30).
+    يرجع None لو ما فيه استئذان نهاية دوام بنفس اليوم.
     نفلتر بـ period='نهاية الدوام' فقط عشان استئذان بداية الدوام ما يأثر على
-    حساب الانصراف بالغلط.
+    حساب الانصراف بالغلط. لو فيه أكثر من استئذان نهاية دوام بنفس اليوم (نادر)،
+    ناخذ أوسع مدى (أبكر بداية، أبعد نهاية).
     """
-    earliest = None
+    earliest_from = None
+    latest_to = None
     for excuse in Excuse.objects.filter(employee=employee, date=local_date, period='نهاية الدوام'):
         parsed_from = _parse_time_string(excuse.time_from)
-        if parsed_from and parsed_from < CHECK_OUT_ON_TIME_START:
-            if earliest is None or parsed_from < earliest:
-                earliest = parsed_from
-    return earliest
+        parsed_to = _parse_time_string(excuse.time_to)
+        if not parsed_from or not parsed_to:
+            continue
+        if earliest_from is None or parsed_from < earliest_from:
+            earliest_from = parsed_from
+        if latest_to is None or parsed_to > latest_to:
+            latest_to = parsed_to
+    if earliest_from is None or latest_to is None:
+        return None
+    return (earliest_from, latest_to)
 
 
 def _exemption_reason(employee, local_date):
@@ -148,17 +161,31 @@ def _is_exempt_day(employee, local_date):
     return _exemption_reason(employee, local_date) is not None
 
 
-def calculate_late_minutes(action, local_dt, checkin_cutoff=None, checkout_excuse_cutoff=None):
+def _first_checkin_date_between(employee, start_date, end_date):
+    """
+    يرجّع أول تاريخ (بالتوقيت المحلي) بين start_date و end_date (شاملة) فيه
+    بصمة حضور فعلية مسجّلة لهذا الموظف، أو None لو ما فيه أي تعارض. يُستخدم
+    لمنع تسجيل طبية أو إجازة تغطي يوم أصلاً بصمت فيه حضور.
+    """
+    checkin_dates = sorted({
+        to_local_time(ts).date()
+        for ts in AttendanceRecord.objects.filter(employee=employee, action='check_in').values_list('timestamp', flat=True)
+        if start_date <= to_local_time(ts).date() <= end_date
+    })
+    return checkin_dates[0] if checkin_dates else None
+
+
+def calculate_late_minutes(action, local_dt, checkin_cutoff=None, checkout_excuse_window=None):
     """
     يحسب دقايق التأخير لعملية حضور أو انصراف واحدة حسب وقتها المحلي (local_dt هو
     datetime بتوقيت الكويت الفعلي، مو UTC). الثواني تُهمل (تُقرّب للدقيقة الأقل).
     - حضور: بعد checkin_cutoff (افتراضياً 8:00، أو وقت نهاية استئذان اليوم لو
       موجود) يُحسب تأخير = (وقت الحضور - القطع) بالدقايق.
-    - انصراف بدون استئذان: قبل 1:30 يُحسب تأخير (خروج مبكر)، بعد 2:30 يُحسب
-      تأخير (خروج متأخر)، وبينهم صفر تأخير.
-    - انصراف بيوم فيه استئذان نهاية دوام (checkout_excuse_cutoff): وقت
-      الاستئذان نفسه يصير الموعد المتوقع بالضبط — انصراف بهذا الوقت أو قبله =
-      صفر تأخير، وأي دقيقة بعده تُحسب تأخير فوراً بدون أي فترة سماح.
+    - انصراف بيوم فيه استئذان نهاية دوام (checkout_excuse_window = (من، إلى)):
+      أي انصراف يقع **داخل** مدى الاستئذان بالكامل (بأي لحظة بينهم) = صفر
+      تأخير، لأنه مغطى بالاستئذان. برّا هذا المدى ترجع القاعدة العادية.
+    - انصراف بدون تغطية استئذان: قبل 1:30 يُحسب تأخير (خروج مبكر)، بعد 2:30
+      يُحسب تأخير (خروج متأخر)، وبينهم صفر تأخير.
     """
     cutoff_time = checkin_cutoff or CHECK_IN_ON_TIME_END
     t = local_dt.time().replace(second=0, microsecond=0)
@@ -170,11 +197,10 @@ def calculate_late_minutes(action, local_dt, checkin_cutoff=None, checkout_excus
         return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
 
     if action == 'check_out':
-        if checkout_excuse_cutoff:
-            if t <= checkout_excuse_cutoff:
+        if checkout_excuse_window:
+            window_start, window_end = checkout_excuse_window
+            if window_start <= t <= window_end:
                 return 0
-            cutoff = local_dt.replace(hour=checkout_excuse_cutoff.hour, minute=checkout_excuse_cutoff.minute, second=0, microsecond=0)
-            return max(int((local_dt.replace(second=0, microsecond=0) - cutoff).total_seconds() // 60), 0)
 
         if t < CHECK_OUT_ON_TIME_START:
             cutoff = local_dt.replace(hour=13, minute=30, second=0, microsecond=0)
@@ -192,8 +218,8 @@ def calculate_late_minutes_for_employee(employee, action, local_dt):
     نفس calculate_late_minutes بس تربط باقي الصفحات مع بعض:
     - يوم فيه طبية أو إجازة مقبولة → صفر تأخير مباشرة (معفى بالكامل).
     - حضور بيوم فيه استئذان → القطع يمتد لوقت نهاية الاستئذان بدل 8:00 الثابتة.
-    - انصراف بيوم فيه استئذان نهاية دوام → وقت الاستئذان نفسه يصير الموعد
-      المتوقع بالضبط للانصراف (تأخير فوري بعده، بدون فترة سماح).
+    - انصراف بيوم فيه استئذان نهاية دوام → أي انصراف داخل مدى الاستئذان
+      بالكامل = صفر تأخير.
     """
     local_date = local_dt.date()
 
@@ -201,8 +227,8 @@ def calculate_late_minutes_for_employee(employee, action, local_dt):
         return 0
 
     checkin_cutoff = _checkin_effective_cutoff(employee, local_date) if action == 'check_in' else None
-    checkout_excuse_cutoff = _checkout_excuse_cutoff(employee, local_date) if action == 'check_out' else None
-    return calculate_late_minutes(action, local_dt, checkin_cutoff=checkin_cutoff, checkout_excuse_cutoff=checkout_excuse_cutoff)
+    checkout_excuse_window = _checkout_excuse_window(employee, local_date) if action == 'check_out' else None
+    return calculate_late_minutes(action, local_dt, checkin_cutoff=checkin_cutoff, checkout_excuse_window=checkout_excuse_window)
 
 
 def minutes_to_hm_label(total_minutes):
@@ -435,6 +461,17 @@ def sick_leave_list(request):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # ما يصير تسجيل طبية بيوم أصلاً بصمت فيه حضور — الطبية تبدأ من اليوم اللي بعده
+        try:
+            sick_date = date.fromisoformat(date_str)
+            if _first_checkin_date_between(employee, sick_date, sick_date):
+                return Response(
+                    {"error": "بصمت حضور بهذا التاريخ بالفعل"},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        except ValueError:
+            pass
+
         leave = SickLeave.objects.create(employee=employee, date=date_str)
         ActivityLog.objects.create(
             action='create',
@@ -505,6 +542,17 @@ def attendance_record_list(request):
         except Employee.DoesNotExist:
             return Response({"error": "الموظف غير موجود"}, status=status.HTTP_404_NOT_FOUND)
 
+        # ما يصير تسجيل حضور ولا انصراف إطلاقاً بيوم فيه إجازة (طبية، أو
+        # إجازة دورية/طارئة مقبولة) — بغض النظر عن نوعها، اليوم يعتبر إجازة كاملة.
+        today_local = to_local_time(dj_timezone.now()).date()
+        today_leave_reason = _exemption_reason(employee, today_local)
+        if today_leave_reason:
+            reason_label = 'طبية مسجّلة' if today_leave_reason == 'sick_leave' else 'إجازة مقبولة'
+            return Response(
+                {"error": f"عندك {reason_label} بتاريخ اليوم — ما يصير تسجيل حضور أو انصراف يوم إجازة"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         last_record = AttendanceRecord.objects.filter(employee=employee).order_by('-timestamp').first()
         has_open_checkin = bool(last_record and last_record.action == 'check_in')
 
@@ -546,20 +594,24 @@ def attendance_record_list(request):
 
         open_checkin_local_date = None
         crosses_into_new_day = False
-        checkout_excuse_cutoff_used = None
+        checkout_excuse_window_used = None
         if action == 'check_out':
             open_checkin_local_date = to_local_time(last_record.timestamp).date()
             now_local = to_local_time(dj_timezone.now())
             crosses_into_new_day = now_local.date() != open_checkin_local_date
 
             # الانصراف بنفس يوم الحضور يفتح بداية من 1:30 عادةً. لو فيه استئذان
-            # نهاية دوام بنفس اليوم، ما فيه قيد وقت أدنى إطلاقاً — مسموح ينصرف
-            # أي وقت، والتأخير يُحسب تلقائياً لو تجاوز وقت الاستئذان (بالأسفل).
+            # نهاية دوام بنفس اليوم وكان وقت الانصراف الحالي داخل مدى الاستئذان
+            # نفسه، ما فيه أي قيد وقت أدنى — مسموح ينصرف بأي لحظة داخل المدى.
             # لو الانصراف صار بيوم تالي (نسى يسجّل انصراف بوقته) يُسمح بأي وقت
             # كمان لأنه أصلاً متأخر جداً (تُحسب الفترة كتأخير كامل بالأسفل).
             if not crosses_into_new_day:
-                checkout_excuse_cutoff_used = _checkout_excuse_cutoff(employee, open_checkin_local_date)
-                if checkout_excuse_cutoff_used is None and now_local.time() < CHECK_OUT_ON_TIME_START:
+                checkout_excuse_window_used = _checkout_excuse_window(employee, open_checkin_local_date)
+                within_excuse_window = bool(
+                    checkout_excuse_window_used
+                    and checkout_excuse_window_used[0] <= now_local.time() <= checkout_excuse_window_used[1]
+                )
+                if not within_excuse_window and now_local.time() < CHECK_OUT_ON_TIME_START:
                     return Response(
                         {"error": "لا يمكن تسجيل الانصراف قبل الساعة 1:30"},
                         status=status.HTTP_400_BAD_REQUEST,
@@ -588,9 +640,9 @@ def attendance_record_list(request):
             checkin_cutoff_used = _checkin_effective_cutoff(employee, local_dt.date())
             record.late_minutes = calculate_late_minutes(action, local_dt, checkin_cutoff=checkin_cutoff_used)
         elif action == 'check_out':
-            # checkout_excuse_cutoff_used محسوبة أعلى وقت التحقق — نفس القيمة
+            # checkout_excuse_window_used محسوبة أعلى وقت التحقق — نفس القيمة
             # تُستخدم بالحساب عشان تطابق استئذان نهاية الدوام (لو موجود).
-            record.late_minutes = calculate_late_minutes(action, local_dt, checkout_excuse_cutoff=checkout_excuse_cutoff_used)
+            record.late_minutes = calculate_late_minutes(action, local_dt, checkout_excuse_window=checkout_excuse_window_used)
         else:
             record.late_minutes = calculate_late_minutes_for_employee(employee, action, local_dt)
 
@@ -603,9 +655,10 @@ def attendance_record_list(request):
         elif checkin_cutoff_used and checkin_cutoff_used != CHECK_IN_ON_TIME_END:
             note_tail = f"متأخر {record.late_minutes} دقيقة" if record.late_minutes else "بدون تأخير"
             late_note = f" — وقت القطع امتد لـ {checkin_cutoff_used.strftime('%H:%M')} بسبب استئذان مسجّل بنفس اليوم ({note_tail})"
-        elif checkout_excuse_cutoff_used:
+        elif checkout_excuse_window_used:
             note_tail = f"متأخر {record.late_minutes} دقيقة" if record.late_minutes else "بدون تأخير"
-            late_note = f" — موعد الانصراف المتوقع {checkout_excuse_cutoff_used.strftime('%H:%M')} بسبب استئذان نهاية دوام مسجّل بنفس اليوم ({note_tail})"
+            w_start, w_end = checkout_excuse_window_used
+            late_note = f" — مغطى باستئذان نهاية دوام من {w_start.strftime('%H:%M')} إلى {w_end.strftime('%H:%M')} بنفس اليوم ({note_tail})"
         elif record.late_minutes:
             late_note = f" — متأخر {record.late_minutes} دقيقة ({minutes_to_hm_label(record.late_minutes)})"
         else:
@@ -691,6 +744,10 @@ def attendance_stats(request):
         ip_address=get_client_ip(request),
     )
 
+    # اليوم إجازة (طبية أو دورية/طارئة مقبولة)؟ — يُستخدم بالفرونت إند لقفل
+    # زري الحضور والانصراف مباشرة بدون ما يحتاج المستخدم يضغط ويشوف رسالة خطأ.
+    today_leave_reason = _exemption_reason(employee, date.today())
+
     return Response({
         "employee": employee.name,
         "year": year,
@@ -699,6 +756,8 @@ def attendance_stats(request):
         "total_late_display": minutes_to_hm_label(total_late_minutes),
         "workdays_count": workdays_count,
         "workdays_target": YEARLY_WORKDAYS_MIN_TARGET,
+        "is_on_leave_today": today_leave_reason is not None,
+        "leave_reason_today": today_leave_reason,
         "alerts": {
             "exceeded_late_limit": exceeded_late_limit,
             "late_limit_minutes": YEARLY_LATE_MINUTES_LIMIT,
@@ -751,6 +810,20 @@ def excuse_list(request):
                 {"error": "تعذّر فهم وقت البداية/النهاية — تأكد إن وقت النهاية بعد وقت البداية"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # ── الوقت لازم يقع بالكامل ضمن ساعات الدوام الفعلي (7:00 - 2:30) ──
+        parsed_from = _parse_time_string(time_from)
+        parsed_to = _parse_time_string(time_to)
+        if (
+            parsed_from is None or parsed_to is None
+            or parsed_from < WORK_HOURS_START or parsed_from > WORK_HOURS_END
+            or parsed_to < WORK_HOURS_START or parsed_to > WORK_HOURS_END
+        ):
+            return Response(
+                {"error": "الوقت اللي اخترته خارج ساعات الدوام — الاستئذان لازم يكون بين 7:30 و2:30"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         if requested_minutes > MAX_EXCUSE_HOURS_PER_DAY * 60:
             return Response(
                 {"error": f"أقصى مدة مسموحة للاستئذان الواحد {MAX_EXCUSE_HOURS_PER_DAY} ساعات"},
@@ -854,6 +927,15 @@ def vacation_list(request):
         new_from = date.fromisoformat(date_from)
         new_to = date.fromisoformat(date_to) if vacation_type == 'periodic' else new_from
 
+        # ما يصير تسجيل إجازة تغطي يوم أصلاً بصمت فيه حضور — الإجازة تبدأ من
+        # اليوم اللي بعد آخر بصمة حضور بمداها.
+        conflicting_checkin_date = _first_checkin_date_between(employee, new_from, new_to)
+        if conflicting_checkin_date:
+            return Response(
+                {"error": f"بصمت حضور بتاريخ {conflicting_checkin_date} بالفعل — ما يصير تاخذ إجازة بنفس يوم بصمت فيه، لازم تبدأ الإجازة من اليوم اللي بعده"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         overlapping = Vacation.objects.filter(employee=employee).exclude(status='rejected')
         for v in overlapping:
             existing_from = v.date_from
@@ -913,18 +995,103 @@ def vacation_list(request):
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
-# PATCH — تحديث حالة إجازة معينة (قبول/رفض/إرجاع لقيد الانتظار) — يستخدمه الأدمن بس
-@api_view(['PATCH'])
+# PATCH — تحديث حالة إجازة (قبول/رفض/إرجاع لقيد الانتظار)، أو تقليل مدة إجازة
+# دورية مقبولة (يرجّع الفرق للرصيد تلقائياً). DELETE — حذف إجازة مقبولة
+# بالكامل (يرجّع كل الأيام للرصيد). التعديل والحذف مسموحين بس للإجازات
+# المقبولة، ويستخدمهم الأدمن بس.
+@api_view(['PATCH', 'DELETE'])
 def vacation_detail(request, pk):
     try:
         vacation = Vacation.objects.get(pk=pk)
     except Vacation.DoesNotExist:
         return Response({"error": "الإجازة غير موجودة"}, status=status.HTTP_404_NOT_FOUND)
 
+    if request.method == 'PATCH' and request.data.get('mark_reviewed'):
+        # الأدمن فتح تفاصيل الطلب بس لسا ما اتخذ قرار — نعلّم الطلب "تمت
+        # مراجعته" عشان الموظف يشوف بمتابعته إن الطلب صار قيد نظر فعلي
+        if not vacation.is_opened_by_admin:
+            vacation.is_opened_by_admin = True
+            vacation.save(update_fields=['is_opened_by_admin'])
+        serializer = VacationSerializer(vacation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    if request.method == 'DELETE':
+        # الرصيد يُحسب حي من سجلات Vacation الموجودة فعلياً، فحذف السجل كافي
+        # لرجوع كل أيامه للرصيد تلقائياً — بدون أي حساب إضافي مطلوب هنا.
+        if vacation.status != 'accepted':
+            return Response(
+                {"error": "الحذف مسموح بس للإجازات المقبولة"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        employee_name = vacation.employee.name
+        type_label = vacation.get_vacation_type_display()
+        days_count = (vacation.date_to - vacation.date_from).days + 1 if vacation.date_to else 1
+        vacation.delete()
+        ActivityLog.objects.create(
+            action='delete',
+            description=f"تم حذف إجازة {employee_name} ({type_label} — {days_count} يوم) بالكامل — رجعت كل الأيام للرصيد",
+            source='vacation',
+            ip_address=get_client_ip(request),
+        )
+        return Response({"deleted": True}, status=status.HTTP_200_OK)
+
+    # ── PATCH: تقليل مدة إجازة دورية مقبولة (مو توسيعها) ──
+    new_date_from = request.data.get('date_from')
+    new_date_to = request.data.get('date_to')
+    if new_date_from or new_date_to:
+        if vacation.status != 'accepted':
+            return Response(
+                {"error": "تعديل المدة مسموح بس للإجازات المقبولة"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if vacation.vacation_type != 'periodic':
+            return Response(
+                {"error": "تعديل المدة متاح بس للإجازة الدورية — الإجازة الطارئة يوم واحد بس، احذفها كاملة لو تبي ترجّع الرصيد"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            parsed_from = datetime.strptime(new_date_from, '%Y-%m-%d').date() if new_date_from else vacation.date_from
+            parsed_to = datetime.strptime(new_date_to, '%Y-%m-%d').date() if new_date_to else vacation.date_to
+        except (ValueError, TypeError):
+            return Response({"error": "صيغة التاريخ غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if parsed_to < parsed_from:
+            return Response({"error": "تاريخ النهاية لازم يكون بعد تاريخ البداية"}, status=status.HTTP_400_BAD_REQUEST)
+
+        # ما يصير توسيع المدة الأصلية، بس تقليلها — لازم المدى الجديد يقع
+        # بالكامل داخل المدى الأصلي
+        if parsed_from < vacation.date_from or parsed_to > vacation.date_to:
+            return Response(
+                {"error": "ما يصير توسيع مدة الإجازة، بس تقليلها ضمن المدى الأصلي"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        old_days = (vacation.date_to - vacation.date_from).days + 1
+        new_days = (parsed_to - parsed_from).days + 1
+
+        vacation.date_from = parsed_from
+        vacation.date_to = parsed_to
+        vacation.save()
+
+        ActivityLog.objects.create(
+            action='update',
+            description=f"تم تقليل إجازة {vacation.employee.name} من {old_days} يوم إلى {new_days} يوم — رجع {old_days - new_days} يوم للرصيد",
+            source='vacation',
+            ip_address=get_client_ip(request),
+        )
+        serializer = VacationSerializer(vacation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    # ── PATCH: تغيير الحالة (قبول/رفض/إرجاع لقيد الانتظار) — نفس المنطق القديم ──
     new_status = request.data.get('status')
     valid_statuses = [choice[0] for choice in Vacation.STATUS_CHOICES]
     if new_status not in valid_statuses:
-        return Response({"error": "حالة غير صحيحة"}, status=status.HTTP_400_BAD_REQUEST)
+        # 🔍 تشخيص مؤقت — يوضّح بالضبط وش استقبل السيرفر (بدون الحاجة لـ DevTools)
+        return Response(
+            {"error": f"حالة غير صحيحة — البيانات المستقبلة فعلياً: {dict(request.data)}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     reviewed_by_id = request.data.get('reviewed_by')
     supervisor = None

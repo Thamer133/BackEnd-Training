@@ -135,6 +135,9 @@ class Vacation(models.Model):
     # المسؤول اللي وافق/رفض الطلب — يتحدد لحظة اتخاذ القرار (فاضي لحد يصير قرار)
     reviewed_by   = models.ForeignKey(Supervisor, on_delete=models.SET_NULL, null=True, blank=True, related_name='reviewed_vacations')
     recorded_at   = models.DateTimeField(auto_now_add=True)   # وقت الحفظ الفعلي بالسيرفر
+    # يصير True أول ما الأدمن يفتح تفاصيل الطلب بتاب "طلبات الإجازات" (حتى لو
+    # لسا ما اتخذ قرار) — يفيد نعرض للموظف إن طلبه "تمت مراجعته" وبانتظار القرار
+    is_opened_by_admin = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-recorded_at']
