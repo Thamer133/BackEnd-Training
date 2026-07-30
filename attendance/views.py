@@ -2,9 +2,11 @@ from datetime import date, datetime, timedelta, time as dt_time
 from zoneinfo import ZoneInfo
 from django.db.models import Q
 from django.utils import timezone as dj_timezone
+from django.contrib.auth.models import User
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import status
+from rest_framework_simplejwt.views import TokenObtainPairView
 from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
 from .serializers import (
     EmployeeSerializer,
@@ -272,6 +274,7 @@ def employee_list(request):
 
         search_terms = ", ".join(f"{k}={v}" for k, v in [("civil_id", civil_id), ("name", name), ("phone_number", phone_number)] if v)
         ActivityLog.objects.create(
+            user=request.user,
             action='view',
             description=f"تم عرض/بحث بقائمة الموظفين{f' ({search_terms})' if search_terms else ''} — {employees.count()} نتيجة",
             source='employee',
@@ -286,6 +289,7 @@ def employee_list(request):
         if serializer.is_valid():
             employee = serializer.save()
             ActivityLog.objects.create(
+                user=request.user,
                 action='create',
                 description=f"تم إضافة موظف جديد: {employee.name}",
                 source='employee',
@@ -313,6 +317,7 @@ def supervisor_list(request):
 
         search_terms = ", ".join(f"{k}={v}" for k, v in [("civil_id", civil_id), ("name", name), ("phone_number", phone_number)] if v)
         ActivityLog.objects.create(
+            user=request.user,
             action='view',
             description=f"تم عرض/بحث بقائمة المسؤولين{f' ({search_terms})' if search_terms else ''} — {supervisors.count()} نتيجة",
             source='supervisor',
@@ -327,6 +332,7 @@ def supervisor_list(request):
         if serializer.is_valid():
             supervisor = serializer.save()
             ActivityLog.objects.create(
+                user=request.user,
                 action='create',
                 description=f"تم إضافة مسؤول جديد: {supervisor.name}",
                 source='supervisor',
@@ -346,6 +352,7 @@ def employee_detail(request, pk):
 
     if request.method == 'GET':
         ActivityLog.objects.create(
+            user=request.user,
             action='view',
             description=f"تم عرض بيانات الموظف {employee.name}",
             source='employee',
@@ -362,6 +369,7 @@ def employee_detail(request, pk):
             serializer.save()
             changed_fields = ", ".join(request.data.keys())
             ActivityLog.objects.create(
+                user=request.user,
                 action='update',
                 description=f"تم تعديل بيانات الموظف {old_name} (الحقول: {changed_fields})",
                 source='employee',
@@ -374,6 +382,7 @@ def employee_detail(request, pk):
         employee_name = employee.name
         employee.delete()
         ActivityLog.objects.create(
+            user=request.user,
             action='delete',
             description=f"تم حذف الموظف {employee_name}",
             source='employee',
@@ -392,6 +401,7 @@ def supervisor_detail(request, pk):
 
     if request.method == 'GET':
         ActivityLog.objects.create(
+            user=request.user,
             action='view',
             description=f"تم عرض بيانات المسؤول {supervisor.name}",
             source='supervisor',
@@ -408,6 +418,7 @@ def supervisor_detail(request, pk):
             serializer.save()
             changed_fields = ", ".join(request.data.keys())
             ActivityLog.objects.create(
+                user=request.user,
                 action='update',
                 description=f"تم تعديل بيانات المسؤول {old_name} (الحقول: {changed_fields})",
                 source='supervisor',
@@ -420,6 +431,7 @@ def supervisor_detail(request, pk):
         supervisor_name = supervisor.name
         supervisor.delete()
         ActivityLog.objects.create(
+            user=request.user,
             action='delete',
             description=f"تم حذف المسؤول {supervisor_name}",
             source='supervisor',
@@ -474,6 +486,7 @@ def sick_leave_list(request):
 
         leave = SickLeave.objects.create(employee=employee, date=date_str)
         ActivityLog.objects.create(
+            user=request.user,
             action='create',
             description=f"تسجيل طبية لـ {employee.name} بتاريخ {date_str}",
             source='sick_leave',
@@ -493,7 +506,7 @@ def sick_leave_detail(request, pk):
 
     description = f"حذف طبية لـ {leave.employee.name} بتاريخ {leave.date}"
     leave.delete()
-    ActivityLog.objects.create(action='delete', description=description, source='sick_leave', ip_address=get_client_ip(request))
+    ActivityLog.objects.create(user=request.user, action='delete', description=description, source='sick_leave', ip_address=get_client_ip(request))
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -513,7 +526,7 @@ def activity_log_list(request):
         if not description:
             return Response({"error": "الوصف مطلوب"}, status=status.HTTP_400_BAD_REQUEST)
 
-        log = ActivityLog.objects.create(action=action, description=description, source=source, ip_address=get_client_ip(request))
+        log = ActivityLog.objects.create(user=request.user, action=action, description=description, source=source, ip_address=get_client_ip(request))
         serializer = ActivityLogSerializer(log)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
 
@@ -665,6 +678,7 @@ def attendance_record_list(request):
             late_note = ""
 
         ActivityLog.objects.create(
+            user=request.user,
             action='create',
             description=f"{employee.name} سجّل {record.get_action_display()} بتاريخ {record.timestamp}{late_note}",
             source='attendance',
@@ -734,6 +748,7 @@ def attendance_stats(request):
     reached_min_attendance = workdays_count >= YEARLY_WORKDAYS_MIN_TARGET
 
     ActivityLog.objects.create(
+        user=request.user,
         action='view',
         description=f"تم عرض إحصائيات التأخير/الدوام لسنة {year} للموظف {employee.name}",
         source='attendance',
@@ -869,6 +884,7 @@ def excuse_list(request):
             employee=employee, date=date_str, time_from=time_from, time_to=time_to, period=period,
         )
         ActivityLog.objects.create(
+            user=request.user,
             action='create',
             description=f"{employee.name} سجّل استئذان بتاريخ {date_str} من {time_from} إلى {time_to} ({period})",
             source='excuse',
@@ -1007,6 +1023,7 @@ def vacation_list(request):
         )
         auto_note = " (تم القبول تلقائياً)" if vacation_type == 'emergency' else ""
         ActivityLog.objects.create(
+            user=request.user,
             action='create',
             description=f"{employee.name} سجّل إجازة {vacation.get_vacation_type_display()} بتاريخ {date_from}{auto_note}",
             source='vacation',
@@ -1049,6 +1066,7 @@ def vacation_detail(request, pk):
         days_count = (vacation.date_to - vacation.date_from).days + 1 if vacation.date_to else 1
         vacation.delete()
         ActivityLog.objects.create(
+            user=request.user,
             action='delete',
             description=f"تم حذف إجازة {employee_name} ({type_label} — {days_count} يوم) بالكامل — رجعت كل الأيام للرصيد",
             source='vacation',
@@ -1096,6 +1114,7 @@ def vacation_detail(request, pk):
         vacation.save()
 
         ActivityLog.objects.create(
+            user=request.user,
             action='update',
             description=f"تم تقليل إجازة {vacation.employee.name} من {old_days} يوم إلى {new_days} يوم — رجع {old_days - new_days} يوم للرصيد",
             source='vacation',
@@ -1144,6 +1163,7 @@ def vacation_detail(request, pk):
 
     reviewer_note = f" بواسطة {supervisor.name}" if supervisor else ""
     ActivityLog.objects.create(
+        user=request.user,
         action='create',
         description=f"تم تحديث حالة إجازة {vacation.employee.name} ({vacation.get_vacation_type_display()}) إلى {vacation.get_status_display()}{reviewer_note}",
         source='vacation',
@@ -1197,6 +1217,7 @@ def employee_full_profile(request):
             "vacations": VacationSerializer(vacations, many=True).data,
         })
         ActivityLog.objects.create(
+            user=request.user,
             action='view',
             description=f"تم عرض الملف الشامل (كل السجلات) للموظف {employee.name}",
             source='employee',
@@ -1341,6 +1362,7 @@ def reports(request):
     report_type_label = REPORT_TYPE_ARABIC_LABEL.get(report_type, report_type)
 
     ActivityLog.objects.create(
+        user=request.user,
         action='view',
         description=(
             f"تم توليد تقرير {report_type_label} من {date_from_str or 'البداية'} "
@@ -1357,3 +1379,36 @@ def reports(request):
         "count": count,
         "results": results_data,
     }, status=status.HTTP_200_OK)
+
+
+# ══ تسجيل الدخول (JWT) — نفس منطق simplejwt العادي بالضبط، بس نسجّل عملية
+# الدخول بسجل الأنشطة (وقت + تاريخ + اسم اليوزر) كل ما حد يسجّل دخول بنجاح ══
+class LoggingTokenObtainPairView(TokenObtainPairView):
+    def post(self, request, *args, **kwargs):
+        response = super().post(request, *args, **kwargs)
+        if response.status_code == 200:
+            username = request.data.get('username', '')
+            user = User.objects.filter(username=username).first()
+            ActivityLog.objects.create(
+                user=user,
+                action='view',
+                description=f"تسجيل دخول: {username}",
+                source='other',
+                ip_address=get_client_ip(request),
+            )
+        return response
+
+
+# ══ تسجيل الخروج — يسجّل عملية الخروج بسجل الأنشطة (وقت + تاريخ + اسم اليوزر)
+# قبل ما الفرونت إند يمسح التوكنات محلياً. (JWT عديم الحالة، فمافيه "إبطال
+# جلسة" فعلي بالسيرفر — بس تسجيل العملية نفسها بالسجل) ══
+@api_view(['POST'])
+def logout_view(request):
+    ActivityLog.objects.create(
+        user=request.user,
+        action='view',
+        description=f"تسجيل خروج: {request.user.username}",
+        source='other',
+        ip_address=get_client_ip(request),
+    )
+    return Response({"detail": "تم تسجيل الخروج"}, status=status.HTTP_200_OK)

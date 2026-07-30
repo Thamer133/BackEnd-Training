@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -38,6 +39,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
     'training',
     'attendance',
@@ -113,12 +115,31 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 
+# ══ إعدادات Django REST Framework + Simple JWT ══
+# كل الـ endpoints صارت تتطلب تسجيل دخول (توكن JWT صالح) افتراضياً — ما يحتاج
+# أي تعديل بملفات attendance/views.py، الحماية تنطبق تلقائياً على كل شي.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(hours=8),   # مدة صلاحية توكن الدخول
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),   # مدة صلاحية توكن التجديد
+    'ROTATE_REFRESH_TOKENS': False,
+}
+
+
 # Internationalization
 # https://docs.djangoproject.com/en/6.0/topics/i18n/
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kuwait'
 
 USE_I18N = True
 

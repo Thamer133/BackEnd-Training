@@ -25,10 +25,11 @@ class SickLeaveSerializer(serializers.ModelSerializer):
 class ActivityLogSerializer(serializers.ModelSerializer):
     action_display = serializers.CharField(source='get_action_display', read_only=True)
     source_display = serializers.CharField(source='get_source_display', read_only=True)
+    username       = serializers.CharField(source='user.username', read_only=True, default=None)
 
     class Meta:
         model = ActivityLog
-        fields = ['id', 'action', 'action_display', 'description', 'source', 'source_display', 'ip_address', 'created_at']
+        fields = ['id', 'action', 'action_display', 'description', 'source', 'source_display', 'user', 'username', 'ip_address', 'created_at']
 
 
 class AttendanceRecordSerializer(serializers.ModelSerializer):

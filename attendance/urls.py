@@ -16,4 +16,5 @@ urlpatterns = [
     path('vacations/<int:pk>/', views.vacation_detail),
     path('employee-profile/', views.employee_full_profile),
     path('reports/', views.reports),
+    path('logout/', views.logout_view),
 ]

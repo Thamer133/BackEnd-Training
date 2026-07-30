@@ -1,6 +1,7 @@
 from django.db import models
 from django.core.validators import RegexValidator
 from django.utils import timezone
+from django.contrib.auth.models import User
 
 # تحقق: رقم التلفون لازم يكون 8 أرقام بالضبط (بدون مسافات أو رموز)
 phone_number_validator = RegexValidator(
@@ -58,13 +59,18 @@ class ActivityLog(models.Model):
     description = models.CharField(max_length=255)
     source      = models.CharField(max_length=20, choices=SOURCE_CHOICES, default='other')
     ip_address  = models.GenericIPAddressField(null=True, blank=True)  # عنوان IP للجهاز اللي سوّى العملية
+    # اليوزر اللي سجّل دخول وسوّى هالعملية فعلياً (من نظام تسجيل الدخول JWT) —
+    # فاضي (null) بس للسجلات القديمة اللي اتسجّلت قبل إضافة تسجيل الدخول
+    user        = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='activity_logs')
     created_at  = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
-        return f"{self.get_action_display()} — {self.description} ({self.created_at})"
+        from django.utils import timezone as dj_timezone
+        local_time = dj_timezone.localtime(self.created_at)
+        return f"{self.get_action_display()} — {self.description} ({local_time.strftime('%Y-%m-%d %H:%M:%S')})"
 
 
 class AttendanceRecord(models.Model):

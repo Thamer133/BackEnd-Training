@@ -24,9 +24,18 @@ class SickLeaveAdmin(admin.ModelAdmin):
 
 @admin.register(ActivityLog)
 class ActivityLogAdmin(admin.ModelAdmin):
-    list_display = ['action', 'description', 'table', 'ip_address', 'created_at']
-    list_filter = ['action', 'source']
-    search_fields = ['description', 'ip_address']
+    list_display = ['user', 'action', 'description', 'table', 'ip_address', 'created_at']
+    list_filter = ['action', 'source', 'user']
+    search_fields = ['description', 'ip_address', 'user__username']
+
+    # سجل الأنشطة سجل تدقيقي — ما يصير حذفه نهائياً، لا فردياً ولا جماعياً
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        actions.pop('delete_selected', None)
+        return actions
 
     def table(self, obj):
         return obj.get_source_display()
