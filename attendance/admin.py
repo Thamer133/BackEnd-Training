@@ -1,12 +1,20 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, Vacation, Supervisor
 from .views import calculate_late_minutes_for_employee, to_local_time
 
 
 @admin.register(Employee)
 class EmployeeAdmin(admin.ModelAdmin):
-    list_display = ['name', 'civil_id', 'phone_number']
-    search_fields = ['name', 'civil_id', 'phone_number']
+    list_display = ['name', 'civil_id', 'phone_number', 'user', 'photo_link']
+    list_filter = ['user']
+    search_fields = ['name', 'civil_id', 'phone_number', 'user__username']
+
+    def photo_link(self, obj):
+        if obj.photo:
+            return format_html('<a href="{}" target="_blank">فتح الصورة</a>', obj.photo.url)
+        return "—"
+    photo_link.short_description = "الصورة الشخصية"
 
 
 @admin.register(Supervisor)

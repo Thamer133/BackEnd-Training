@@ -3,9 +3,20 @@ from .models import Employee, SickLeave, ActivityLog, AttendanceRecord, Excuse, 
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
+    photo_url = serializers.SerializerMethodField()
+    username  = serializers.CharField(source='user.username', read_only=True, default=None)
+
+    def get_photo_url(self, obj):
+        if not obj.photo:
+            return None
+        request = self.context.get('request')
+        url = obj.photo.url
+        return request.build_absolute_uri(url) if request else url
+
     class Meta:
         model = Employee
-        fields = ['id', 'name', 'civil_id', 'phone_number']
+        fields = ['id', 'name', 'civil_id', 'phone_number', 'user', 'username', 'photo', 'photo_url']
+        extra_kwargs = {'photo': {'write_only': True}}
 
 
 class SupervisorSerializer(serializers.ModelSerializer):

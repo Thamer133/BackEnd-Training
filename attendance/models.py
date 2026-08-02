@@ -20,6 +20,10 @@ class Employee(models.Model):
     name         = models.CharField(max_length=255)
     civil_id     = models.CharField(max_length=12, validators=[civil_id_validator], null=True, blank=True)  # الرقم المدني للموظف
     phone_number = models.CharField(max_length=8, validators=[phone_number_validator], null=True, blank=True)  # رقم تلفون الموظف (8 أرقام)
+    # ربط الموظف بحساب تسجيل الدخول (User) — يحدد أي صورة شخصية تخص أي موظف
+    # حسب حساب اليوزر اللي سجّل دخول فعلياً. يُعبّى يدوياً من لوحة الأدمن.
+    user  = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='employee_profile')
+    photo = models.ImageField(upload_to='employee_photos/', null=True, blank=True)
 
     def __str__(self):
         return self.name

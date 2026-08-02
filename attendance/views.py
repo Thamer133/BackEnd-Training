@@ -3,7 +3,8 @@ from zoneinfo import ZoneInfo
 from django.db.models import Q
 from django.utils import timezone as dj_timezone
 from django.contrib.auth.models import User
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, parser_classes
+from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.views import TokenObtainPairView
@@ -1412,3 +1413,35 @@ def logout_view(request):
         ip_address=get_client_ip(request),
     )
     return Response({"detail": "تم تسجيل الخروج"}, status=status.HTTP_200_OK)
+
+
+# ══ الصورة الشخصية للموظف — مرتبطة بحساب تسجيل الدخول (User) نفسه، مو باسم
+# ثابت. الموظف لازم يكون مربوط مسبقاً بحساب يوزر من لوحة الأدمن (حقل user
+# بموديل Employee) عشان يقدر يرفع/يشوف صورته. ══
+@api_view(['GET', 'POST'])
+@parser_classes([MultiPartParser, FormParser])
+def my_employee_profile(request):
+    try:
+        employee = Employee.objects.get(user=request.user)
+    except Employee.DoesNotExist:
+        return Response(
+            {"error": "حسابك مو مربوط بأي موظف بعد — لازم الأدمن يربطه أول من لوحة الأدمن (حقل user بجدول الموظفين)"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if request.method == 'POST':
+        photo = request.FILES.get('photo')
+        if not photo:
+            return Response({"error": "الرجاء إرفاق صورة"}, status=status.HTTP_400_BAD_REQUEST)
+        employee.photo = photo
+        employee.save(update_fields=['photo'])
+        ActivityLog.objects.create(
+            user=request.user,
+            action='update',
+            description=f"تم تحديث الصورة الشخصية للموظف {employee.name}",
+            source='employee',
+            ip_address=get_client_ip(request),
+        )
+
+    serializer = EmployeeSerializer(employee, context={'request': request})
+    return Response(serializer.data, status=status.HTTP_200_OK)
