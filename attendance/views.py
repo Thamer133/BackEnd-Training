@@ -1039,7 +1039,7 @@ def vacation_list(request):
         conflicting_checkin_date = _first_checkin_date_between(employee, new_from, new_to)
         if conflicting_checkin_date:
             return Response(
-                {"error": f"بصمت حضور بتاريخ {conflicting_checkin_date} بالفعل — ما يصير تاخذ إجازة بنفس يوم بصمت فيه، لازم تبدأ الإجازة من اليوم اللي بعده"},
+                {"error": f"بصمت حضور بتاريخ {conflicting_checkin_date} بالفعل"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
