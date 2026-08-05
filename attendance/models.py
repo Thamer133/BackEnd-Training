@@ -16,10 +16,21 @@ civil_id_validator = RegexValidator(
 )
 
 
+JOB_TITLE_CHOICES = [
+    ('مهندس مبتدئ حاسوب', 'مهندس مبتدئ حاسوب'),
+    ('مهندس حاسوب', 'مهندس حاسوب'),
+    ('مهندس أول', 'مهندس أول'),
+    ('كبير المهندسين', 'كبير المهندسين'),
+]
+
+
 class Employee(models.Model):
     name         = models.CharField(max_length=255)
     civil_id     = models.CharField(max_length=12, validators=[civil_id_validator], null=True, blank=True)  # الرقم المدني للموظف
     phone_number = models.CharField(max_length=8, validators=[phone_number_validator], null=True, blank=True)  # رقم تلفون الموظف (8 أرقام)
+    # المسمى الوظيفي — قائمة ثابتة (4 خيارات بس)، تظهر كـdropdown بلوحة الأدمن
+    # تلقائياً بمجرد ما نحدد choices. يظهر بمستند تصريح الاستئذان الرسمي.
+    job_title    = models.CharField(max_length=255, choices=JOB_TITLE_CHOICES, null=True, blank=True)
     # ربط الموظف بحساب تسجيل الدخول (User) — يحدد أي صورة شخصية تخص أي موظف
     # حسب حساب اليوزر اللي سجّل دخول فعلياً. يُعبّى يدوياً من لوحة الأدمن.
     user  = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='employee_profile')
@@ -116,11 +127,20 @@ class Excuse(models.Model):
 class Supervisor(models.Model):
     """
     جدول المسؤولين (اللي يوافقون/يرفضون طلبات الإجازات) — نفس هيكل Employee
-    تقريباً (اسم + رقم مدني + رقم تلفون)، بس منفصل تماماً. يُعبّى يدوياً من لوحة الأدمن.
+    بالضبط (اسم + رقم مدني + رقم تلفون + وظيفة + حساب دخول + صورة شخصية)، بس
+    منفصل تماماً كجدول. يُعبّى يدوياً من لوحة الأدمن.
     """
     name         = models.CharField(max_length=255)
     civil_id     = models.CharField(max_length=12, validators=[civil_id_validator], null=True, blank=True)
     phone_number = models.CharField(max_length=8, validators=[phone_number_validator], null=True, blank=True)
+    # نفس قائمة المسميات الوظيفية المستخدمة بموديل Employee بالضبط (JOB_TITLE_CHOICES)
+    job_title    = models.CharField(max_length=255, choices=JOB_TITLE_CHOICES, null=True, blank=True)
+    # ربط المسؤول بحساب تسجيل الدخول (User) — نفس آلية Employee.user بالضبط.
+    # related_name مختلف (supervisor_profile) عشان ما يتعارض مع Employee.user
+    # اللي related_name له employee_profile (نفس حساب User واحد ما يقدر يرتبط
+    # بموظف ومسؤول بنفس الوقت لو صار ربطه بالاثنين غلط، بس هذا احتمال نادر).
+    user  = models.OneToOneField(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='supervisor_profile')
+    photo = models.ImageField(upload_to='supervisor_photos/', null=True, blank=True)
 
     def __str__(self):
         return self.name
